@@ -38,6 +38,7 @@ class ImageProcessing(Node):
 
         ### Image Processing
         self.br = CvBridge()
+        self.count = 0
 
         ### Tf2
         self.tf_buffer = Buffer()
@@ -55,16 +56,22 @@ class ImageProcessing(Node):
             upper_red = np.array([10, 255, 255])
             # Threshold the HSV image to get only red colors
             color_mask = cv2.inRange(hsv, lower_red, upper_red)
+            # Creating kernel 
+            kernel = np.ones((5, 5), np.uint8) 
+            color_mask = cv2.erode(color_mask, kernel, iterations=1)  
             apple_mask = np.array(color_mask, dtype=bool)
             pc = pc[apple_mask]
+            # if self.count == 50:
+            #     np.save("filtered_apples.npy", pc)
             pc = pc2.create_cloud_xyz32(points.header, pc)
             self.filtered_points_publisher.publish(pc)
+            self.count += 1
             
             # NOT NEEDED RIGHT NOW FOR BASIC RED CIRCLE
             # Find contours that match criteria
             # contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-            # cv2.imshow("test", mask)
+            # cv2.imshow("test", color_mask)
             # cv2.waitKey(1)
             
 
