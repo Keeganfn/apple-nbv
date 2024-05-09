@@ -6,4 +6,4 @@
 - moveit
 
 ### To Run
-- ros2 launch nbv nbv_launch.py
+- ```ros2 launch nbv nbv_launch.py```
