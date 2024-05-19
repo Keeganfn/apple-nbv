@@ -113,24 +113,34 @@ def generate_launch_description():
 
 
 
-    moveit_cpp_node = launch_ros.actions.Node(
+    moveit_cpp_node = Node(
                     package='nbv',
                     executable='move_arm',
                     name='move_arm',
                     parameters=[robot_description,robot_description_semantic,{"use_sim_time": True}])
     
-    image_processing = launch_ros.actions.Node(
+    image_processing = Node(
                     package='nbv',
                     executable='image_processing.py',
                     name='image_processing')
 
     octomap = IncludeLaunchDescription(
-              XMLLaunchDescriptionSource([FindPackageShare("nbv"), "/launch", "/octomap_mapping.launch.xml"]))
+              XMLLaunchDescriptionSource([
+                  FindPackageShare("nbv"), 
+                  "/launch", 
+                  "/octomap_mapping.launch.xml"
+                ]))
 
+    apple_identifier_node = Node(
+        package='nbv',
+        executable='apple_identifier.py',
+        name='apple_identifier'
+    )
 
     return launch.LaunchDescription([
             ur5e_launch,
             moveit_cpp_node,
-            image_processing, 
+            image_processing,
+            apple_identifier_node, 
             octomap
   ])

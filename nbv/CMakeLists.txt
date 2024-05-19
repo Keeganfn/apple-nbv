@@ -48,16 +48,19 @@ ament_target_dependencies(
 
 install(PROGRAMS
   scripts/image_processing.py
+  scripts/apple_identifier.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
-install(TARGETS move_arm
-  DESTINATION lib/${PROJECT_NAME})
-
+install(TARGETS 
+  move_arm
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 # Install launch files.
 install(DIRECTORY
   launch
+  scripts
   DESTINATION share/${PROJECT_NAME}/
 )
 # Install resource files.
