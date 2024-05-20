@@ -5,7 +5,6 @@ import scipy.cluster.hierarchy as hcluster
 import math
 file_path='C:/Users/15418/Downloads/filtered_apples.npy'
 cloud=np.load(file_path)
-#print(cloud)
 def three_D_plot(cloud):
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
@@ -71,7 +70,6 @@ def upsample(cloud,cluster_centers, graph=False):
                 clusters.append(i)
                 cloud_list[i].append(point)
                 break
-    #print(cloud_list)
     if graph:
         plt.scatter(*np.transpose(data), c=clusters)
         plt.axis("equal")
@@ -121,6 +119,7 @@ def get_spheres(cloud_list):
         centers.append([sphere[1][0], sphere[2][0], sphere[3][0]])
         radius=sphere[0]
         radii.append(radius)
+        #start of attempt to get surface area covered
         sphere_x_max=sphere[1][0]+radius
         sphere_x_min=sphere[1][0]-radius
         xs=[sphere_x_max,sphere_x_min]
@@ -135,12 +134,6 @@ def get_spheres(cloud_list):
             for y in ys:
                 for z in zs:
                     quadrants.append([x,y,z])
-        x_max=max(x_vals)
-        x_min=min(x_vals)
-        y_max=max(y_vals)
-        y_min=min(y_vals)
-        z_max=max(z_vals)
-        z_min=min(z_vals)
         for quadrant in quadrants:
             pass
     return centers, radii
@@ -162,13 +155,13 @@ def plt_sphere(list_center, list_radius):
                         alpha=0.5 * np.random.random() + 0.5)
         i+=1
     fig.show()
-#testplot(cloud)
+
 data, clusters=xy_clustering(cloud, graph=True)
 cluster_centers=get_cluster_center(data,clusters)
 cloud_list=upsample(cloud,cluster_centers, graph=True)
 spheres=get_spheres(cloud_list)
 plt_sphere(spheres[0], spheres[1])
-#plt.show()
+
 
 
 
