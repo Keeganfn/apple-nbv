@@ -171,7 +171,4 @@ plt_sphere(spheres[0], spheres[1])
 #plt.show()
 
 
-#to do
-#speed up clustering:
-#image and back?
-#down sample, then get every point near downsample?!!
+
