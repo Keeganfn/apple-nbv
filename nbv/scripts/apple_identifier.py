@@ -76,10 +76,11 @@ class AppleIdentifier(Node):
 
         return apples
     
-    def fit_ellipsoid(self, data):
-        """Fit an ellipsoid to the data
+    def fit_ellipsoid(self, data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Fit ellipsoids to the data
         https://www.mathworks.com/matlabcentral/fileexchange/24693-ellipsoid-fit
-        
+        https://github.com/aleksandrbazhin/ellipsoid_fit_python/blob/master/ellipsoid_fit.py
+
         Fit ellipsoid in the form Ax^2 + By^2 + Cz^2 + 2Dxy + 2Exz + 2Fyz + 2Gx +
         2Hy + 2Iz + J = 0 and A + B + C = 3 constraint removing one extra
         parameter
@@ -134,30 +135,35 @@ class AppleIdentifier(Node):
 
         return data
     
-    def filter_ellipsoid(self, data):
+    def filter_ellipsoid(self, data: List[Dict[str, Any]]):
         """Filter out the ellipsoids with bad spherical fits"""
         for apple in data:
             self.info_logger(apple["cluster_num"])
-            self.info_logger(apple["ellipsoid"]["radii"])
+            
+
+            radii_std = np.std(apple["ellipsoid"]["radii"])
+            if radii_std > 0.1:
+                del apple
+            self.info_logger(radii_std)
             
         return
     
-    def identify_apples(self, _data):
+    def identify_apples(self, data: np.ndarray):
         res = ft.pipe(
-            _data,
+            data,
             self.run_k_means,
             self.fit_ellipsoid,
             self.filter_ellipsoid
         )
         return res
     
-    def plot_kmeans(self, _data=None):
-        # plt.axis([0, 10, 0, 1])
-        data = _data
-        self.ax.scatter(data[:,0], data[:,1], data[:,2])
-        plt.pause(0.05)
+    # def plot_kmeans(self, _data=None):
+    #     # plt.axis([0, 10, 0, 1])
+    #     data = _data
+    #     self.ax.scatter(data[:,0], data[:,1], data[:,2])
+    #     plt.pause(0.05)
         
-        return
+    #     return
 
 
 def main():
