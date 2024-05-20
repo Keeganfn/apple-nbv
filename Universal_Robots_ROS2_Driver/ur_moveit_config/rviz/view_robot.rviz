@@ -261,9 +261,9 @@ Visualization Manager:
       Velocity_Scaling_Factor: 0.1
     - Class: octomap_rviz_plugins/OccupancyGrid
       Enabled: true
-      Max. Height Display: inf
+      Max. Height Display: 3.4028234663852886e+38
       Max. Octree Depth: 16
-      Min. Height Display: -inf
+      Min. Height Display: -3.4028234663852886e+38
       Name: OccupancyGrid
       Topic:
         Depth: 5
@@ -276,6 +276,18 @@ Visualization Manager:
       Voxel Alpha: 1
       Voxel Coloring: Z-Axis
       Voxel Rendering: Occupied Voxels
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: MarkerArray
+      Namespaces:
+        "": true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /apple_identifier/apple_markers
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
