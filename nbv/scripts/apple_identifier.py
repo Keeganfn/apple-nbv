@@ -137,16 +137,14 @@ class AppleIdentifier(Node):
     
     def filter_ellipsoid(self, data: List[Dict[str, Any]]):
         """Filter out the ellipsoids with bad spherical fits"""
+        apples_filtered = []
         for apple in data:
-            self.info_logger(apple["cluster_num"])
-            
-
             radii_std = np.std(apple["ellipsoid"]["radii"])
             if radii_std > 0.1:
-                del apple
-            self.info_logger(radii_std)
-            
-        return
+                continue
+            else:
+                apples_filtered.append(apple)            
+        return apples_filtered
     
     def identify_apples(self, data: np.ndarray):
         res = ft.pipe(
