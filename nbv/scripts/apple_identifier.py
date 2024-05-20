@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-
+# ROS
 import rclpy
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
+from rosidl_runtime_py.set_message import set_message_fields
 from sensor_msgs.msg import PointCloud2
 import sensor_msgs_py.point_cloud2 as pc2
+from nbv_interfaces.msg import Apple, AppleArr, Ellipsoid
+from geometry_msgs.msg import Point, Point32, Vector3
 
 from sklearn.cluster import KMeans
 
@@ -32,45 +35,57 @@ class AppleIdentifier(Node):
         )
 
         # Publishers
-        self._pub_k_means = self.create_publisher(
-            msg_type=PointCloud2,
-            topic=f"{self.get_name()}/k_means",
+        self._pub_apples = self.create_publisher(
+            msg_type=AppleArr,
+            topic=f"{self.get_name()}/apples",
             qos_profile=1
         )
 
         # Timers
-        self._timer_k_means = self.create_timer(
+        self._timer_pub_apples = self.create_timer(
             timer_period_sec=1/20,
-            callback=self._timer_cb_pub_k_means
+            callback=self._timer_cb_pub_apples
         )
 
-        self.k_means = KMeans()
+        self.k_means = KMeans(5) # TODO: how to we get the number of clusters dynamically?
         self.k_means_params = self.k_means.get_params()
         
-        self.fig = plt.figure()
-        self.ax = self.fig.add_subplot(projection='3d')
+        self.apples = None
         return
     
-    def _sub_cb_octomap_pc(self, msg: PointCloud2):
+    def _sub_cb_octomap_pc(self, msg: PointCloud2) -> None:
         pc = pc2.read_points_numpy(msg, ["x", "y", "z"])
-        apples = self.identify_apples(pc)
-        
-        # self.info_logger(apples)
+        self.apples = self.identify_apples(pc)
         return
     
-    def _timer_cb_pub_k_means(self):
-        msg = PointCloud2()
-        # self._pub_k_means.publish(msg=apples)
+    def _timer_cb_pub_apples(self) -> None:
+        if self.apples is None:
+            return
+        msg_apples = AppleArr()
+
+        for apple in self.apples:
+            msg_apple = Apple()
+            msg_ellipsoid = Ellipsoid()
+
+            center = apple["ellipsoid"]["center"]
+            radii = apple["ellipsoid"]["radii"]
+            msg_ellipsoid.center = Point(x=center[0], y=center[1], z=center[2])
+            msg_ellipsoid.evecs = [Vector3(x=evec[0], y=evec[1], z=evec[2]) for evec in apple["ellipsoid"]["evecs"]]
+            msg_ellipsoid.radii = Vector3(x=radii[0], y=radii[1], z=radii[2])
+
+            msg_apple.cluster_num = apple["cluster_num"]
+            msg_apple.points = [Point32(x=point[0].item(), y=point[1].item(), z=point[2].item()) for point in apple["points"]]
+            msg_apple.ellipsoid = msg_ellipsoid
+
+            msg_apples.apples.append(msg_apple)
         return
 
-    def run_k_means(self, _data: PointCloud2) -> List[Dict[str, Any]]:
-        # fit_data = self.k_means.fit(_data)
+    def run_k_means(self, data: np.ndarray) -> List[Dict[str, Any]]:
+        """Run k-means on the point cloud data so that """
         apples = []
-        predict_data = self.k_means.fit_predict(_data)
-        # zipped_data = zip(_data, predict_data)
-        # self.plot_kmeans(_data=_data)
+        predict_data = self.k_means.fit_predict(data)
         for cluster_num in range(self.k_means_params["n_clusters"]):
-            apple_points = [_data[i] for i in range(len(_data)) if predict_data[i] == cluster_num]
+            apple_points = [data[i] for i in range(len(data)) if predict_data[i] == cluster_num]
             apple_dict = {"cluster_num": cluster_num, "points": apple_points}
             apples.append(apple_dict)
 
@@ -135,7 +150,7 @@ class AppleIdentifier(Node):
 
         return data
     
-    def filter_ellipsoid(self, data: List[Dict[str, Any]]):
+    def filter_ellipsoid(self, data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Filter out the ellipsoids with bad spherical fits"""
         apples_filtered = []
         for apple in data:
@@ -143,26 +158,19 @@ class AppleIdentifier(Node):
             if radii_std > 0.1:
                 continue
             else:
-                apples_filtered.append(apple)            
+                apples_filtered.append(apple)    
         return apples_filtered
     
-    def identify_apples(self, data: np.ndarray):
-        res = ft.pipe(
+    def identify_apples(self, data: np.ndarray) -> List[Dict[str, Any]]:
+        """Pipe the data through a series of methods to get the apple data"""
+        apples = ft.pipe(
             data,
             self.run_k_means,
             self.fit_ellipsoid,
             self.filter_ellipsoid
         )
-        return res
+        return apples
     
-    # def plot_kmeans(self, _data=None):
-    #     # plt.axis([0, 10, 0, 1])
-    #     data = _data
-    #     self.ax.scatter(data[:,0], data[:,1], data[:,2])
-    #     plt.pause(0.05)
-        
-    #     return
-
 
 def main():
     rclpy.init()

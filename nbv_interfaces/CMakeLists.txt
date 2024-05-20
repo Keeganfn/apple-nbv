@@ -16,6 +16,9 @@ find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/MoveArm.srv"
   "srv/MoveToNamedTarget.srv"
+  "msg/Ellipsoid.msg"
+  "msg/Apple.msg"
+  "msg/AppleArr.msg"
   DEPENDENCIES 
   std_msgs
   geometry_msgs

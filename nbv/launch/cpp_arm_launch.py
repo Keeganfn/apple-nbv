@@ -108,8 +108,9 @@ def generate_launch_description():
             executable='move_arm',
             name='move_arm',
             parameters=[
-            robot_description,
-            robot_description_semantic,
-            {"use_sim_time": True},
-            ])
+                robot_description,
+                robot_description_semantic,
+                {"use_sim_time": True},
+            ]
+        )
   ])
