@@ -29,7 +29,7 @@ class AppleIdentifier(Node):
         # Subscribers
         self._sub_octomap_pc = self.create_subscription(
             msg_type=PointCloud2,
-            topic="/octomap_point_cloud_centers",
+            topic="/filtered_apple_points",
             callback=self._sub_cb_octomap_pc,
             qos_profile=1
         )
@@ -78,6 +78,9 @@ class AppleIdentifier(Node):
             msg_apple.ellipsoid = msg_ellipsoid
 
             msg_apples.apples.append(msg_apple)
+
+        # Publish the mssage
+        self._pub_apples.publish(msg_apples)
         return
 
     def run_k_means(self, data: np.ndarray) -> List[Dict[str, Any]]:
