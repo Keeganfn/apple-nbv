@@ -3,8 +3,11 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import scipy.cluster.hierarchy as hcluster
 import math
+import time
+start_time=time.time()
 file_path='C:/Users/15418/Downloads/filtered_apples.npy'
 cloud=np.load(file_path)
+#print(cloud)
 def three_D_plot(cloud):
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
@@ -70,6 +73,7 @@ def upsample(cloud,cluster_centers, graph=False):
                 clusters.append(i)
                 cloud_list[i].append(point)
                 break
+    #print(cloud_list)
     if graph:
         plt.scatter(*np.transpose(data), c=clusters)
         plt.axis("equal")
@@ -119,7 +123,6 @@ def get_spheres(cloud_list):
         centers.append([sphere[1][0], sphere[2][0], sphere[3][0]])
         radius=sphere[0]
         radii.append(radius)
-        #start of attempt to get surface area covered
         sphere_x_max=sphere[1][0]+radius
         sphere_x_min=sphere[1][0]-radius
         xs=[sphere_x_max,sphere_x_min]
@@ -134,9 +137,54 @@ def get_spheres(cloud_list):
             for y in ys:
                 for z in zs:
                     quadrants.append([x,y,z])
+        #downsample cloud
+        cloud=cloud[:, :][0::25]
+        #collect the point totals for each cloud
+        point_totals=[]
         for quadrant in quadrants:
-            pass
-    return centers, radii
+            num_points=0
+            x_quad, y_quad, z_quad = quadrant
+            if x_quad>sphere[1][0] and y_quad>sphere[2][0] and z_quad>sphere[3][0]:
+                for point in cloud:
+                    if point[0]>sphere[1][0] and point[1]>sphere[2][0] and point[2]>sphere[3][0]:
+                        num_points+=1
+                point_totals.append(num_points)
+            elif x_quad<sphere[1][0] and y_quad>sphere[2][0] and z_quad>sphere[3][0]:
+                for point in cloud:
+                    if point[0]<sphere[1][0] and point[1]>sphere[2][0] and point[2]>sphere[3][0]:
+                        num_points+=1
+                point_totals.append(num_points)
+            elif x_quad<sphere[1][0] and y_quad<sphere[2][0] and z_quad>sphere[3][0]:
+                for point in cloud:
+                    if point[0]<sphere[1][0] and point[1]<sphere[2][0] and point[2]>sphere[3][0]:
+                        num_points+=1
+                point_totals.append(num_points)
+            elif x_quad>sphere[1][0] and y_quad<sphere[2][0] and z_quad>sphere[3][0]:
+                for point in cloud:
+                    if point[0]>sphere[1][0] and point[1]<sphere[2][0] and point[2]>sphere[3][0]:
+                        num_points+=1
+                point_totals.append(num_points)
+            elif x_quad<sphere[1][0] and y_quad<sphere[2][0] and z_quad<sphere[3][0]:
+                for point in cloud:
+                    if point[0]<sphere[1][0] and point[1]<sphere[2][0] and point[2]<sphere[3][0]:
+                        num_points+=1
+                point_totals.append(num_points)
+            elif x_quad>sphere[1][0] and y_quad<sphere[2][0] and z_quad<sphere[3][0]:
+                for point in cloud:
+                    if point[0]>sphere[1][0] and point[1]<sphere[2][0] and point[2]<sphere[3][0]:
+                        num_points+=1
+                point_totals.append(num_points)
+            elif x_quad>sphere[1][0] and y_quad>sphere[2][0] and z_quad<sphere[3][0]:
+                for point in cloud:
+                    if point[0]>sphere[1][0] and point[1]>sphere[2][0] and point[2]<sphere[3][0]:
+                        num_points+=1
+                point_totals.append(num_points)
+            elif x_quad<sphere[1][0] and y_quad>sphere[2][0] and z_quad<sphere[3][0]:
+                for point in cloud:
+                    if point[0]<sphere[1][0] and point[1]>sphere[2][0] and point[2]<sphere[3][0]:
+                        num_points+=1
+                point_totals.append(num_points)
+    return centers, radii, point_totals
 
 #from https://stackoverflow.com/questions/64656951/plotting-spheres-of-radius-r
 def plt_sphere(list_center, list_radius):
@@ -155,13 +203,13 @@ def plt_sphere(list_center, list_radius):
                         alpha=0.5 * np.random.random() + 0.5)
         i+=1
     fig.show()
-
-data, clusters=xy_clustering(cloud, graph=True)
+data, clusters=xy_clustering(cloud, graph=False)
 cluster_centers=get_cluster_center(data,clusters)
-cloud_list=upsample(cloud,cluster_centers, graph=True)
+cloud_list=upsample(cloud,cluster_centers, graph=False)
 spheres=get_spheres(cloud_list)
-plt_sphere(spheres[0], spheres[1])
-
-
+#plt_sphere(spheres[0], spheres[1])
+end_time=time.time()
+print(end_time-start_time)
+#plt.show()
 
 
