@@ -186,6 +186,45 @@ def get_spheres(cloud_list):
                 point_totals.append(num_points)
     return centers, radii, point_totals
 
+def get_spheres_polar(cloud_list,degree_step):
+    centers=[]
+    radii=[]
+    all_spheres_point_totals=[]
+    #running sum of all points to check that they all get assigned
+    rs=0
+    degrees = range(-180, 180, degree_step)
+    quadrants = []
+    #what are the quadrants?? same poitn could be described with two different angles
+
+
+    #print(quadrants)
+    for cloud in cloud_list:
+        cloud=np.array(cloud)
+        x_vals=cloud[:,0]
+        y_vals=cloud[:,1]
+        z_vals=cloud[:,2]
+        sphere=sphereFit(x_vals,y_vals,z_vals)
+        centers.append([sphere[1][0], sphere[2][0], sphere[3][0]])
+        radius=sphere[0]
+        radii.append(radius)
+        #convert to polar
+        polar_points=[]
+        for point in cloud:
+            #get x,y,z relative to cloud center
+            x,y,z=point-[sphere[1][0], sphere[2][0], sphere[3][0]]
+            #find the two angles
+            t1=np.arctan2(y,x)*180/np.pi
+            t2=np.arctan2(z,x)*180/np.pi
+            r=np.sqrt(x**2+y**2+z**2)
+            polar_points.append([t1,t2,r])
+        #apple radius is usually .048ish
+        #degree range: -180 to 180
+        radius_max=radius*1.1
+        radius_min=radius*.9
+
+
+    #print(rs)
+    return centers, radii, all_spheres_point_totals
 #from https://stackoverflow.com/questions/64656951/plotting-spheres-of-radius-r
 def plt_sphere(list_center, list_radius):
     fig = plt.figure()
