@@ -49,6 +49,7 @@ ament_target_dependencies(
 install(PROGRAMS
   scripts/image_processing.py
   scripts/apple_identifier.py
+  scripts/extended_normal_algorithm.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

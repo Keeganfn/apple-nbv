@@ -43,6 +43,7 @@ class AppleIdentifier(Node):
         # Timers
         self._timer_pub_apples = self.create_timer(timer_period_sec=1 / 10, callback=self._timer_cb_pub_apples)
 
+        # K-means
         self.k_means = KMeans(5)  # TODO: how to we get the number of clusters dynamically?
         self.k_means_params = self.k_means.get_params()
 
@@ -90,7 +91,8 @@ class AppleIdentifier(Node):
                 position=Point(x=center[0], y=center[1], z=center[2]),
                 orientation=Quaternion(x=0.0, y=0.0, z=0.0, w=0.0),
             )
-            msg_marker.scale = Vector3(x=radii[0] * 10, y=radii[1] * 10, z=radii[2] * 10)
+            # msg_marker.scale = Vector3(x=radii[0] * 10, y=radii[1] * 10, z=radii[2] * 10)
+            msg_marker.scale = Vector3(x=0.1, y=0.1, z=0.1)
             msg_marker.color = ColorRGBA(r=1.0, g=0.1, b=0.1, a=1.0)
             msg_apple_markers.markers.append(msg_marker)
 
@@ -103,7 +105,11 @@ class AppleIdentifier(Node):
     def run_k_means(self, data: np.ndarray) -> List[Dict[str, Any]]:
         """Run k-means on the point cloud data so that"""
         apples = []
-        k_means_fit = self.k_means.fit(data)
+        try:
+            k_means_fit = self.k_means.fit(data)
+        except ValueError as e:
+            self.info_logger(f"{e}: Unable to run k-means")
+            return apples
         predict_data = k_means_fit.predict(data)
         centers = k_means_fit.cluster_centers_
         for cluster_num in range(self.k_means_params["n_clusters"]):
@@ -124,9 +130,13 @@ class AppleIdentifier(Node):
         """
         for apple in data:
             points = apple["points"]
-            x = points[:][0]
-            y = points[:][1]
-            z = points[:][2]
+            try:
+                x = points[:][0]
+                y = points[:][1]
+                z = points[:][2]
+            except IndexError as e:
+                self.info_logger(f"{e}: Could not fit an ellipsoid for apple {apple['cluster_num']}")
+                continue
             D = np.array(
                 [
                     x ** 2 + y ** 2 - 2 * z ** 2,

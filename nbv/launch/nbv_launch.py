@@ -137,10 +137,17 @@ def generate_launch_description():
         name='apple_identifier'
     )
 
+    extended_normal_algorithm_node = Node(
+        package='nbv',
+        executable='extended_normal_algorithm.py',
+        name='next_best_view_ena'
+    )
+
     return launch.LaunchDescription([
             ur5e_launch,
             moveit_cpp_node,
             image_processing,
-            apple_identifier_node, 
+            apple_identifier_node,
+            extended_normal_algorithm_node, 
             octomap
   ])
