@@ -114,6 +114,7 @@ def sphereFit(spX,spY,spZ):
 def get_spheres(cloud_list):
     centers=[]
     radii=[]
+    point_totals_all=[]
     for cloud in cloud_list:
         cloud=np.array(cloud)
         x_vals=cloud[:,0]
@@ -184,6 +185,7 @@ def get_spheres(cloud_list):
                     if point[0]<sphere[1][0] and point[1]>sphere[2][0] and point[2]<sphere[3][0]:
                         num_points+=1
                 point_totals.append(num_points)
+        point_totals_all.append(point_totals)
     return centers, radii, point_totals
 
 def get_spheres_polar(cloud_list,degree_step):
