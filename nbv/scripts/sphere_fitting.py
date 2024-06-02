@@ -29,6 +29,7 @@ def testplot(cloud):
     y=cloud[:,1]
     plt.scatter(x,y)
     plt.show()
+
 def xy_clustering(cloud, graph=False):
     x=cloud[:,0][0::100]
     y=cloud[:,1][0::100]
@@ -120,14 +121,15 @@ def sphereFit(spX,spY,spZ) -> Sphere:
     return sphere
 
 
-def get_spheres(cloud_list):
+def get_spheres(cloud_list, num_bins: int = 8):
     centers=[]
     radii=[]
     point_totals_all=[]
 
     spheres = []
 
-    theta_bin = np.linspace(-np.pi, np.pi, 8)
+    theta_bin = np.linspace(-np.pi, np.pi, num_bins+1)
+    print(theta_bin)
     phi_bin = np.linspace(0, np.pi, 2)
 
     for cloud in cloud_list:
@@ -135,7 +137,8 @@ def get_spheres(cloud_list):
         sphere=sphereFit(cloud[:,0],cloud[:,1],cloud[:,2])
 
         cloud_xyz = np.subtract(cloud, sphere.center.T)
-        cloud_thetas = np.arctan2(cloud_xyz[:,1], cloud_xyz[:,0])
+        cloud_thetas = np.arctan2(cloud_xyz[:,2], cloud_xyz[:,0])
+        # print(cloud_thetas[0::100])
         cloud_phis = np.arctan2(cloud_xyz[:,2], cloud_xyz[:,0])
         cloud_phis = np.where(cloud_phis >= 0, cloud_phis, cloud_phis + np.pi)
         # print(cloud_phis)
@@ -153,24 +156,24 @@ def get_spheres(cloud_list):
         # np.digitize()
 
 
-        import sys
-        sys.exit()
+        # import sys
+        # sys.exit()
         
 
 
         # Polar stuff!
         # Find xyz distances from center of each apple to point cloud points
-        bin_points = np.zeros(sphere.num_bins)
-        bin_size = 2*np.pi / sphere.num_bins
+        # bin_points = np.zeros(sphere.num_bins)
+        # bin_size = 2*np.pi / sphere.num_bins
 
-        for i, _bin in enumerate(sphere.num_bins):
-            bin_points = np.where()
+        # for i, _bin in enumerate(sphere.num_bins):
+        #     bin_points = np.where()
 
-        for point in cloud:
-            x, y, z = np.subtract(point, sphere.center)
-            theta=np.arctan2(y, x)
-            phi=np.arctan2(z, x)
-            r = np.sqrt(x**2 + y**2 + z**2)
+        # for point in cloud:
+        #     x, y, z = np.subtract(point, sphere.center)
+        #     theta=np.arctan2(y, x)
+        #     phi=np.arctan2(z, x)
+        #     r = np.sqrt(x**2 + y**2 + z**2)
 
 
     return
