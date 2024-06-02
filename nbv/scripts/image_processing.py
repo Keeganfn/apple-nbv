@@ -43,7 +43,7 @@ class ImageProcessing(Node):
         ### Tf2
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
-
+        return
 
     def rgbd_callback(self, rgb, points):
             # Convert to opencv format from msg
