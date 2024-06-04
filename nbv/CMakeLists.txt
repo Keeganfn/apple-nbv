@@ -48,6 +48,7 @@ ament_target_dependencies(
 
 install(PROGRAMS
   scripts/image_processing.py
+  scripts/sphere_fitting.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

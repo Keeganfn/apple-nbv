@@ -1,5 +1,4 @@
 import launch
-import launch_ros.actions
 import os
 
 from launch import LaunchDescription
@@ -113,16 +112,22 @@ def generate_launch_description():
 
 
 
-    moveit_cpp_node = launch_ros.actions.Node(
+    node_moveit_cpp = Node(
                     package='nbv',
                     executable='move_arm',
                     name='move_arm',
                     parameters=[robot_description,robot_description_semantic,{"use_sim_time": True}])
     
-    image_processing = launch_ros.actions.Node(
+    node_image_processing = Node(
                     package='nbv',
                     executable='image_processing.py',
                     name='image_processing')
+    
+    node_sphere_fitting = Node(
+                    package="nbv",
+                    executable="sphere_fitting.py",
+                    name="sphere_fitting",
+    )
 
     octomap = IncludeLaunchDescription(
               XMLLaunchDescriptionSource([FindPackageShare("nbv"), "/launch", "/octomap_mapping.launch.xml"]))
@@ -130,7 +135,8 @@ def generate_launch_description():
 
     return launch.LaunchDescription([
             ur5e_launch,
-            moveit_cpp_node,
-            image_processing, 
+            node_moveit_cpp,
+            node_image_processing, 
+            node_sphere_fitting,
             octomap
   ])
