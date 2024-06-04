@@ -212,6 +212,7 @@ def plt_sphere(list_center, list_radius):
                         alpha=0.5 * np.random.random() + 0.5)
         i+=1
     fig.show()
+    return
 
 
 
