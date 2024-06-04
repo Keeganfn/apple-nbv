@@ -44,10 +44,18 @@ MoveArmNode::MoveArmNode() : Node("move_arm_node", rclcpp::NodeOptions().automat
     
 
     // Set up services, one for pose goals and one for named target goals
-    arm_service_ = this->create_service<nbv_interfaces::srv::MoveArm>("move_arm", std::bind(&MoveArmNode::move_to_pose, this, _1, _2), 
-                                                                                rmw_qos_profile_services_default, callback_group_subscriber1_);
-    arm_named_service_ = this->create_service<nbv_interfaces::srv::MoveToNamedTarget>("move_arm_named_target", std::bind(&MoveArmNode::move_to_named_target, this, _1, _2),
-                                                                                                 rmw_qos_profile_services_default, callback_group_subscriber2_);
+    arm_service_ = this->create_service<nbv_interfaces::srv::MoveArm>(
+        "move_arm",
+        std::bind(&MoveArmNode::move_to_pose, this, _1, _2), 
+        rmw_qos_profile_services_default,
+        callback_group_subscriber1_
+    );
+    arm_named_service_ = this->create_service<nbv_interfaces::srv::MoveToNamedTarget>(
+        "move_arm_named_target",
+        std::bind(&MoveArmNode::move_to_named_target, this, _1, _2),
+        rmw_qos_profile_services_default,
+        callback_group_subscriber2_
+    );
     moveit::planning_interface::PlanningSceneInterface planning_scene_interface_;
     auto const collision_object = [frame_id =move_group_.getPlanningFrame()] {
         moveit_msgs::msg::CollisionObject collision_object;
@@ -108,14 +116,18 @@ void MoveArmNode::move_to_pose(const std::shared_ptr<nbv_interfaces::srv::MoveAr
                                const std::shared_ptr<nbv_interfaces::srv::MoveArm::Response> response)
 {
     // Make posestamped message
-    tf2::Quaternion orientation;
-    orientation.setRPY(3.14/2, 3.14, 3.14/2);
+    // tf2::Quaternion orientation;
+    // orientation.setRPY(3.14/2, 3.14, 3.14/2);
     geometry_msgs::msg::PoseStamped msg;
-    msg.header.frame_id = "base_link";
-    msg.pose.orientation = tf2::toMsg(orientation);;
-    msg.pose.position.x = request->goal.x;
-    msg.pose.position.y = request->goal.y;
-    msg.pose.position.z = request->goal.z;
+    // msg.header.frame_id = "base_link";
+    // msg.pose.orientation = tf2::toMsg(orientation);;
+    msg.pose.position.x = request->goal.position.x;
+    msg.pose.position.y = request->goal.position.y;
+    msg.pose.position.z = request->goal.position.z;
+    msg.pose.orientation.x = request->goal.orientation.x;
+    msg.pose.orientation.y = request->goal.orientation.y;
+    msg.pose.orientation.z = request->goal.orientation.z;
+    msg.pose.orientation.w = request->goal.orientation.w;
     this->move_group_.setPoseTarget(msg, "tool0");
     this->move_group_.setGoalOrientationTolerance(.1);
 

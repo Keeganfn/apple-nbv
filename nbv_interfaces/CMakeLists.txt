@@ -16,6 +16,7 @@ find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/MoveArm.srv"
   "srv/MoveToNamedTarget.srv"
+  "srv/RunNBV.srv"
   DEPENDENCIES 
   std_msgs
   geometry_msgs
