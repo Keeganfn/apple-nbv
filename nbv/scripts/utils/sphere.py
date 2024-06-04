@@ -14,4 +14,5 @@ class Sphere:
         self.center = np.array([self.center_x, self.center_y, self.center_z])
         self.theta_bin_counts: dict = {}
         self.phi_bin_counts: dict = {}
+        self.bins: dict = {}
 
