@@ -191,12 +191,21 @@ def get_vector(spheres, num_bins: int = 8):
     #have to offset to get the bottom half of the sphere to be negative
     z=np.sin(phi-np.pi/2)
     unit_vector=np.array([x,y,z])
-    print(unit_vector)
     camera_orientation=-1*unit_vector
-    #subject to change, uses the y distance to center sphere from scan (may be unreachable, may want to use different aaproach)
-    print(sphere.center_y)
+    #subject to change, uses the y distance to center sphere from scan (may be unreachable, may want to use different approach)
     camera_coords=[sphere.center_x[0], sphere.center_y[0], sphere.center_z[0]]+unit_vector*sphere.center_y
-    print(camera_coords)
+    camera_coords=np.array(camera_coords)
+    coord_radius=np.sqrt(camera_coords[0]**2+camera_coords[1]**2+camera_coords[2])
+    #if trying to move out of 90% of max reach
+    if coord_radius>.85*.9:
+        scaling=(.85*.9)/coord_radius
+        camera_coords=camera_coords*scaling
+        #adjust orienation
+        new_coords_to_center=[sphere.center_x[0], sphere.center_y[0], sphere.center_z[0]]-camera_coords
+        #new camera orientation is unit vector pointed at center
+        #get length of vector
+        orientation_len=np.sqrt(new_coords_to_center[0]**2+new_coords_to_center[1]**2+new_coords_to_center[2]**2)
+        camera_orientation=[new_coords_to_center]/orientation_len
     return camera_coords, camera_orientation
 
 def get_spheres_polar(cloud_list,degree_step):
