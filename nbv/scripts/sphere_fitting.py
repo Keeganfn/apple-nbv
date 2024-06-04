@@ -19,6 +19,8 @@ import matplotlib.pyplot as plt
 from toolz import functoolz as ft
 from typing import Union
 
+from objprint import op
+
 
 class SphereFitting(Node):
     def __init__(self, num_bins: int = 8) -> None:
@@ -54,8 +56,8 @@ class SphereFitting(Node):
         data, clusters = self.xy_clustering(self.filtered_pc)
         cluster_centers = self.get_cluster_center(data, clusters)
         cloud_list = self.upsample(self.filtered_pc, cluster_centers)
-        # spheres = self.get_spheres(cloud_list=cloud_list)
-        # self.info_logger(type(cluster_centers))
+        spheres = self.get_spheres(cloud_list=cloud_list)
+        self.info_logger(spheres)
         return
     
     # def _timer_cb_pub_apple_bins(self) -> None:
@@ -64,10 +66,10 @@ class SphereFitting(Node):
     #     return
     
     def xy_clustering(self, cloud, graph=False):
-        x=cloud[:,0][0::100]
-        y=cloud[:,1][0::100]
+        x=cloud[:,0]#[0::100]
+        y=cloud[:,2]#[0::100]
         data=np.dstack((x,y))[0]
-        thresh = .02
+        thresh = 0.015
         clusters = hcluster.fclusterdata(data, thresh, criterion="distance")
         if graph:
             plt.scatter(*np.transpose(data), c=clusters)
@@ -101,20 +103,18 @@ class SphereFitting(Node):
     def upsample(self, cloud, cluster_centers):
         cloud_list=[[],[],[],[],[]]
         x=cloud[:,0]
-        y=cloud[:,1]
-        z = cloud[:, 2]
+        y=cloud[:,2]
+        z = cloud[:, 1]
         data = np.dstack((x,y,z))[0]
         
-
         #empty array to put designated cluster in
         clusters=[]
         for point in data:
             for i in range(len(cluster_centers)):
-                
+                # self.info_logger(cluster_centers)
                 cluster=cluster_centers[i]
                 
                 if point[0]>cluster[0]-cluster[2] and point[0]<cluster[0]+cluster[2] and point[1]>cluster[1]-cluster[3] and point[1]<cluster[1]+cluster[3]:
-                    self.info_logger(cluster)
                     clusters.append(i)
                     cloud_list[i].append(point)
                     break
@@ -145,16 +145,14 @@ class SphereFitting(Node):
         return sphere
     
     def get_spheres(self, cloud_list) -> Union[list, None]:
-        spheres = []
+        spheres = np.empty(len(cloud_list), dtype=Sphere)
 
-        for cloud in cloud_list:
+        for i, cloud in enumerate(cloud_list):
             if not cloud:
-                return None
+                continue
             # Fit a sphere to the cloud
-            self.info_logger(f"HELLO WORLD: {type(cloud)}")
             cloud=np.array(cloud)
             sphere=self.sphereFit(cloud[:,0],cloud[:,1],cloud[:,2])
-
             # Find theta and phi for each point in the cloud with respect to the center of the sphere.
             cloud_xyz = np.subtract(cloud, sphere.center.T)
             cloud_thetas = np.arctan2(cloud_xyz[:,2], cloud_xyz[:,0])
@@ -172,7 +170,9 @@ class SphereFitting(Node):
             phi_unique, phi_counts = np.unique(phi_binned, return_counts=True)
             sphere.phi_bin_counts = dict(zip(phi_unique, phi_counts))
 
-            spheres.append(sphere)
+            spheres[i] = sphere
+
+        
         return spheres
     
     def get_nbv_vec(self, cloud):
@@ -184,7 +184,6 @@ class SphereFitting(Node):
         cloud_list = self.upsample(cloud, cluster_centers)
         spheres = self.get_spheres(cloud_list=cloud_list)
 
-        self.info_logger(spheres)
         return 
 
 def main():
