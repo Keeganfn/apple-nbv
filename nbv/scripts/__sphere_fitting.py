@@ -128,8 +128,6 @@ def get_spheres(cloud_list, num_bins: int = 8):
     theta_bin = np.linspace(-np.pi, np.pi, num_bins+1)
     phi_bin = np.linspace(0, np.pi, 2+1)
 
-    print(phi_bin)
-
     for cloud in cloud_list:
         # Fit a sphere to the cloud
         cloud=np.array(cloud)
@@ -139,8 +137,8 @@ def get_spheres(cloud_list, num_bins: int = 8):
         cloud_xyz = np.subtract(cloud, sphere.center.T)
         cloud_thetas = np.arctan2(cloud_xyz[:,2], cloud_xyz[:,0])
 
-        cloud_phis = np.arctan2(cloud_xyz[:,2], cloud_xyz[:,0])
-        cloud_phis = np.where(cloud_phis >= 0, cloud_phis, cloud_phis + np.pi)
+        cloud_phis = np.arctan2(cloud_xyz[:,1], cloud_xyz[:,0])
+        cloud_phis = np.where(cloud_phis >= 0, cloud_phis, cloud_phis+np.pi)
 
         # Get binned theta values
         theta_binned = np.digitize(cloud_thetas, theta_bin)
@@ -151,10 +149,55 @@ def get_spheres(cloud_list, num_bins: int = 8):
         phi_binned = np.digitize(cloud_phis, phi_bin)
         phi_unique, phi_counts = np.unique(phi_binned, return_counts=True)
         sphere.phi_bin_counts = dict(zip(phi_unique, phi_counts))
-
+        for theta_bin_num in range(1,num_bins+1):
+            for phi_bin_num in range(1,3):
+                current_phi_bin=phi_binned==phi_bin_num
+                current_theta_bin=theta_binned==theta_bin_num
+                current_bin=current_theta_bin&current_phi_bin
+                if phi_bin_num==1:
+                    full_bin_num=theta_bin_num
+                else:
+                    full_bin_num=theta_bin_num+num_bins
+                #these are left bin angles
+                theta_angle=theta_bin[theta_bin_num-1]
+                phi_angle = phi_bin[phi_bin_num - 1]
+                sphere.bins[full_bin_num]=[np.sum(current_bin),theta_angle,phi_angle]
+                #print(np.sum(current_bin), 'phi bin: ',phi_bin_num,'theta bin: ', theta_bin_num)
         # Add the sphere to our list
         spheres.append(sphere)
     return spheres
+
+def get_vector(spheres, num_bins: int = 8):
+    #subject to change (maybe select based on center? or fully explored property?
+    sphere=spheres[0]
+    #get the front bins only
+    #not a prettier way to do it as far as I can tell, wont  let me use sphere.bins[1:4,9:12]
+    front_bins={}
+    for i in range(1,8+1):
+        if i<5:
+            bin=sphere.bins[i]
+        else:
+            bin=sphere.bins[i+4]
+        front_bins[i]=bin
+    #do we need a threshold for filled bins?? x number of points in each bin before going to next apple
+    bin=min(front_bins, key=front_bins.get)
+    full_bin=sphere.bins[bin]
+    #I think this is in global frame?? (z up, x left to right, y into page) need to check this frame
+    #from https://stackoverflow.com/questions/30011741/3d-vector-defined-by-2-angles
+    theta=full_bin[1]+2*np.pi/num_bins
+    phi=full_bin[2]+np.pi/4
+    x=np.sin(theta)*np.cos(phi)
+    y=-np.cos(theta)*np.cos(phi)
+    #have to offset to get the bottom half of the sphere to be negative
+    z=np.sin(phi-np.pi/2)
+    unit_vector=np.array([x,y,z])
+    print(unit_vector)
+    camera_orientation=-1*unit_vector
+    #subject to change, uses the y distance to center sphere from scan (may be unreachable, may want to use different aaproach)
+    print(sphere.center_y)
+    camera_coords=[sphere.center_x[0], sphere.center_y[0], sphere.center_z[0]]+unit_vector*sphere.center_y
+    print(camera_coords)
+    return camera_coords, camera_orientation
 
 def get_spheres_polar(cloud_list,degree_step):
     centers=[]
@@ -221,8 +264,8 @@ def main():
     cluster_centers=get_cluster_center(data,clusters)
     cloud_list=upsample(cloud,cluster_centers, graph=False)
     spheres=get_spheres(cloud_list)
-
-    op(spheres)
+    get_vector(spheres)
+    #op(spheres)
 
     return
 
