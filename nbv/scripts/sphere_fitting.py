@@ -3,6 +3,7 @@
 from utils.sphere import Sphere
 
 import rclpy
+from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 
@@ -17,6 +18,7 @@ import numpy as np
 import scipy.cluster.hierarchy as hcluster
 from scipy.spatial.transform import Rotation
 import matplotlib.pyplot as plt
+from threading import Event
 
 from toolz import functoolz as ft
 from typing import Union
@@ -29,6 +31,7 @@ class SphereFitting(Node):
         super().__init__(node_name="sphere_processing")
         self.info_logger = lambda x: self.get_logger().info(f"{x}")
         self.warn_logger = lambda x: self.get_logger().warn(f"{x}")
+        self.err_logger = lambda x: self.get_logger().error(f"{x}")
 
         # Subscribers
         self._sub_octomap_binary = self.create_subscription(
@@ -37,17 +40,24 @@ class SphereFitting(Node):
         self.filtered_pc: np.ndarray
 
         # Services servers
+        self._srv_cb_group = ReentrantCallbackGroup()
+        self._srv_done_event = Event()
+
         self._svr_run_nbv = self.create_service(
             srv_type=RunNBV,
             srv_name="run_nbv",
-            callback=self._svr_cb_run_nbv
+            callback=self._svr_cb_run_nbv,
+            callback_group=self._srv_cb_group
         )
 
         # Service clients
         self._srv_move_arm = self.create_client(
             srv_name="/move_arm",
             srv_type=MoveArm,
+            callback_group=self._srv_cb_group
         )
+
+        
 
         # # Timers
         # self._timer_pub_apple_bins = self.create_timer(
@@ -63,26 +73,48 @@ class SphereFitting(Node):
     
     def _svr_cb_run_nbv(self, request, response):
         self.info_logger("RUN NBV service requested")
+        if not self._srv_move_arm.wait_for_service(timeout_sec=5.0):
+            self.err_logger("Service unavailable.")
+            return response
+        
+        self._srv_done_event.clear()
+
+        # event = Event()
+        self.inner_response = None
+
         try:
             xyz, quat = self.get_nbv_vec(cloud=self.filtered_pc)
             
             self.warn_logger(f'{xyz}, {quat}')
             pose = Pose(
-                position=Point(x=xyz[0], y=xyz[1] ,z=xyz[2]),
+                position=Point(x=xyz[0], y=xyz[2] ,z=xyz[1]),
                 orientation=Quaternion(x=quat[0], y=quat[1], z=quat[2], w=quat[3])
             )
             move_arm = MoveArm.Request()
             move_arm.goal = pose
 
-            result = self._srv_move_arm.call(request=move_arm)
-            self.warn_logger(result)
+            future = self._srv_move_arm.call_async(request=move_arm)
+            future.add_done_callback(self.inner_callback)
 
-            response.success = True
+            self._srv_done_event.wait()
+            if self.inner_response:
+                response.success = True
+            else:
+                response.success = False
         except Exception as e:
             response.success = False
             self.warn_logger(e)
         return response
-
+    
+    def inner_callback(self, future):
+        try:
+            self.inner_response = future.result()
+        except Exception as e:
+            self.err_logger(f"Service call failed: {e}")
+            self.inner_response = None
+        finally:
+            self._srv_done_event.set()
+        return
 
     def _sub_cb_octomap_pc(self, msg: PointCloud2) -> None:
         """Subscriber to the filtered point cloud from image_processor.py"""
