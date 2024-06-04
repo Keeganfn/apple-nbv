@@ -9,6 +9,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2
 import sensor_msgs_py.point_cloud2 as pc2
 from std_msgs.msg import Float64
+from nbv_interfaces.srv import MoveArm
 
 import numpy as np
 import scipy.cluster.hierarchy as hcluster
@@ -28,9 +29,10 @@ class SphereFitting(Node):
         )
         self.filtered_pc: np.ndarray
 
-        # Publishers
-        self._pub_apple_bins = self.create_publisher(
-            msg_type=Float64, topic="apples_binned", qos_profile=1
+        # Service clients
+        self._srv_move_arm = self.create_client(
+            srv_name="/move_arm",
+            srv_type=MoveArm,
         )
 
         # Timers

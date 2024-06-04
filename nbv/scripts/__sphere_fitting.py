@@ -126,7 +126,9 @@ def sphereFit(spX,spY,spZ) -> Sphere:
 def get_spheres(cloud_list, num_bins: int = 8):
     spheres = []
     theta_bin = np.linspace(-np.pi, np.pi, num_bins+1)
-    phi_bin = np.linspace(0, np.pi, 2)
+    phi_bin = np.linspace(0, np.pi, 2+1)
+
+    print(phi_bin)
 
     for cloud in cloud_list:
         # Fit a sphere to the cloud
@@ -150,6 +152,7 @@ def get_spheres(cloud_list, num_bins: int = 8):
         phi_unique, phi_counts = np.unique(phi_binned, return_counts=True)
         sphere.phi_bin_counts = dict(zip(phi_unique, phi_counts))
 
+        # Add the sphere to our list
         spheres.append(sphere)
     return spheres
 
