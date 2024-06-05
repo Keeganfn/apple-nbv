@@ -236,7 +236,7 @@ class SphereFitting(Node):
             cloud_xyz = np.subtract(cloud, sphere.center.T)
             cloud_thetas = np.arctan2(cloud_xyz[:, 2], cloud_xyz[:, 0])
 
-            cloud_phis = np.arctan2(cloud_xyz[:, 2], cloud_xyz[:, 0])
+            cloud_phis = np.arctan2(cloud_xyz[:, 1], cloud_xyz[:, 0])
             cloud_phis = np.where(cloud_phis >= 0, cloud_phis, cloud_phis + np.pi)
 
             # Get binned theta values
@@ -294,37 +294,31 @@ class SphereFitting(Node):
         full_bin=sphere.bins[_bin]
         #I think this is in global frame?? (z up, x left to right, y into page) need to check this frame
         #from https://stackoverflow.com/questions/30011741/3d-vector-defined-by-2-angles
-        theta=full_bin[1]+2*np.pi/self.num_bins
-        phi=full_bin[2]+np.pi/4
-        x=np.sin(theta)*np.cos(phi)
-        y=-np.cos(theta)*np.cos(phi)
-        #have to offset to get the bottom half of the sphere to be negative
-        z=np.sin(phi-np.pi/2)
+        theta = full_bin[1] +  np.pi / self.num_bins
+        phi = full_bin[2] + np.pi / 4
+        y = np.cos(theta) * np.cos(phi- np.pi / 2)
+        x = np.sin(theta) * np.cos(phi- np.pi / 2)
+        # have to offset to get the bottom half of the sphere to be negative
+        z = np.sin(phi - np.pi / 2)
         unit_vector=np.array([x,y,z])
+        unit_vector = unit_vector / np.linalg.norm(unit_vector)
         camera_orientation=-1*unit_vector
 
+        self.warn_logger(f"bin: {_bin}")
         self.warn_logger(f"xyz: {[x, y, z]}")
-        self.warn_logger(f"camera_orientation{camera_orientation}")
+        self.warn_logger(f"theta: {theta}")
+        self.warn_logger(f"phi: {phi}")
+        self.warn_logger(f"unit_vector: {unit_vector}")
         
 
-        base_link_v = np.array([0,0,1])
-        a = np.cross(base_link_v, camera_orientation)
 
-        self.warn_logger(a)
-
-        w = np.sqrt(np.linalg.norm(base_link_v)**2 * np.linalg.norm(camera_orientation)**2) + np.dot(base_link_v, camera_orientation)
-
-        self.warn_logger(f"w: {w}")
-        q = np.append(a,w)
-        q = q / np.linalg.norm(q)
-
-        self.warn_logger(f'quat: {q}')
         #subject to change, uses the y distance to center sphere from scan (may be unreachable, may want to use different approach)
         camera_coords=[sphere.center_x[0], sphere.center_y[0], sphere.center_z[0]] + 0.9*unit_vector*sphere.center_y
         camera_coords=np.array(camera_coords)
         coord_radius=np.sqrt(camera_coords[0]**2+camera_coords[1]**2+camera_coords[2]**2)
         #if trying to move out of 90% of max reach
         if coord_radius>.85*.9:
+            self.info_logger("ENTERED IF STATEMENT")
             scaling=(.85*.9)/coord_radius
             camera_coords=camera_coords*scaling
             #adjust orienation
@@ -332,7 +326,24 @@ class SphereFitting(Node):
             #new camera orientation is unit vector pointed at center
             #get length of vector
             orientation_len=np.sqrt(new_coords_to_center[0]**2+new_coords_to_center[1]**2+new_coords_to_center[2]**2)
-            camera_orientation=[new_coords_to_center]/orientation_len
+            camera_orientation=np.array([new_coords_to_center])[0]/orientation_len
+
+        self.warn_logger(f"camera_orientation{camera_orientation}")
+
+        base_link_v = np.array([0,0,1])
+        a = np.cross(base_link_v, camera_orientation)
+
+        # self.warn_logger(a)
+
+        w = np.sqrt(np.linalg.norm(base_link_v)**2 * np.linalg.norm(camera_orientation)**2) + np.dot(base_link_v, camera_orientation)
+
+        self.warn_logger(f"w: {w}")
+        # Create q and normalize it
+        q = np.append(a,w)
+        q = q / np.linalg.norm(q)
+
+        self.warn_logger(f'quat: {q}')
+
 
         # camera_orientation = Rotation.from_euler(seq='xyz', angles=camera_orientation, degrees=False).as_quat()[0]
         return camera_coords, q
