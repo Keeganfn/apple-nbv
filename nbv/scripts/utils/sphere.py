@@ -5,6 +5,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from typing import Union
+
 
 class Sphere:
     def __init__(self, center_x: float, center_y, center_z, radius, num_bins=8):
@@ -16,3 +18,4 @@ class Sphere:
         self.theta_bin_counts: dict = {}
         self.phi_bin_counts: dict = {}
         self.bins: dict = {}
+        self.min_bin: Union[int, None] = None

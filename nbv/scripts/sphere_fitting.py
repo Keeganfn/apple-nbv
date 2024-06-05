@@ -57,14 +57,6 @@ class SphereFitting(Node):
             callback_group=self._srv_cb_group
         )
 
-        
-
-        # # Timers
-        # self._timer_pub_apple_bins = self.create_timer(
-        #     timer_period_sec=1.0,
-        #     callback=self._timer_cb_pub_apple_bins
-        # )
-
         # NBV bin data
         self.num_bins = num_bins
         self.theta_bin = np.linspace(-np.pi, np.pi, num_bins + 1)
@@ -87,9 +79,13 @@ class SphereFitting(Node):
             
             self.warn_logger(f'{xyz}, {quat}')
             pose = Pose(
-                position=Point(x=xyz[0], y=xyz[2] ,z=xyz[1]),
+                position=Point(x=xyz[0], y=-xyz[2] ,z=xyz[1]),
                 orientation=Quaternion(x=quat[0], y=quat[1], z=quat[2], w=quat[3])
             )
+            # pose = Pose(
+            #     position=Point(x=0.35, y=0.0 ,z=0.60),
+            #     orientation=Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
+            # )
             move_arm = MoveArm.Request()
             move_arm.goal = pose
 
@@ -120,11 +116,6 @@ class SphereFitting(Node):
         """Subscriber to the filtered point cloud from image_processor.py"""
         self.filtered_pc = pc2.read_points_numpy(msg, ["x", "y", "z"])        
         return
-
-    # def _timer_cb_pub_apple_bins(self) -> None:
-    #     """Timer callback for publishing the binned apple data"""
-    #     # self._pub_apple_bins.publish()
-    #     return
 
     def xy_clustering(self, cloud, graph=False):
         x = cloud[:, 0]  # [0::100]
@@ -257,19 +248,27 @@ class SphereFitting(Node):
         return spheres
     
     def get_vector(self, spheres):
-        #subject to change (maybe select based on center? or fully explored property?
-        sphere=spheres[0]
-        #get the front bins only
-        #not a prettier way to do it as far as I can tell, wont  let me use sphere.bins[1:4,9:12]
-        front_bins={}
-        for i in range(1,8+1):
-            if i<5:
-                _bin=sphere.bins[i]
-            else:
-                _bin=sphere.bins[i+4]
-            front_bins[i]=_bin
-        #do we need a threshold for filled bins?? x number of points in each bin before going to next apple
-        _bin=min(front_bins, key=front_bins.get)
+        try:
+            for _sphere in spheres:
+                #get the front bins only
+                if not _sphere.bins:
+                    continue
+                front_bins={}
+                for bin_id, val in _sphere.bins.items():
+                    if bin_id in [1,2,3,4,9,10,11,12]:
+                        _bin = val
+                    front_bins[bin_id] = _bin
+
+                #do we need a threshold for filled bins?? x number of points in each bin before going to next apple
+                _bin=min(front_bins, key=front_bins.get)
+                _sphere.min_bin = _bin
+        except Exception as e:
+            self.err_logger(e)
+
+        self.warn_logger(spheres)
+
+        sphere = spheres[np.argmin([_sphere.min_bin for _sphere in spheres if _sphere is not None])]
+
         full_bin=sphere.bins[_bin]
         #I think this is in global frame?? (z up, x left to right, y into page) need to check this frame
         #from https://stackoverflow.com/questions/30011741/3d-vector-defined-by-2-angles
@@ -281,10 +280,17 @@ class SphereFitting(Node):
         z=np.sin(phi-np.pi/2)
         unit_vector=np.array([x,y,z])
         camera_orientation=-1*unit_vector
+
+        base_link_v = np.array([0,0,1])
+        a = np.cross(-base_link_v, camera_orientation)
+        w = np.sqrt(np.linalg.norm(base_link_v)**2 * np.linalg.norm(camera_orientation)**2) + np.dot(base_link_v, camera_orientation)
+        q = np.append(a,w)
+        q = q / np.linalg.norm(q)
+        self.warn_logger(q)
         #subject to change, uses the y distance to center sphere from scan (may be unreachable, may want to use different approach)
-        camera_coords=[sphere.center_x[0], sphere.center_y[0], sphere.center_z[0]]+unit_vector*sphere.center_y
+        camera_coords=[sphere.center_x[0], sphere.center_y[0], sphere.center_z[0]] + 0.9*unit_vector*sphere.center_y
         camera_coords=np.array(camera_coords)
-        coord_radius=np.sqrt(camera_coords[0]**2+camera_coords[1]**2+camera_coords[2])
+        coord_radius=np.sqrt(camera_coords[0]**2+camera_coords[1]**2+camera_coords[2]**2)
         #if trying to move out of 90% of max reach
         if coord_radius>.85*.9:
             scaling=(.85*.9)/coord_radius
@@ -296,8 +302,8 @@ class SphereFitting(Node):
             orientation_len=np.sqrt(new_coords_to_center[0]**2+new_coords_to_center[1]**2+new_coords_to_center[2]**2)
             camera_orientation=[new_coords_to_center]/orientation_len
 
-        camera_orientation = Rotation.from_euler(seq='xyz', angles=camera_orientation, degrees=False).as_quat()[0]
-        return camera_coords, camera_orientation
+        # camera_orientation = Rotation.from_euler(seq='xyz', angles=camera_orientation, degrees=False).as_quat()[0]
+        return camera_coords, q
 
     def get_nbv_vec(self, cloud):
         # ft.pipe(

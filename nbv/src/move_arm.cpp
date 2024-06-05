@@ -119,7 +119,7 @@ void MoveArmNode::move_to_pose(const std::shared_ptr<nbv_interfaces::srv::MoveAr
     // tf2::Quaternion orientation;
     // orientation.setRPY(3.14/2, 3.14, 3.14/2);
     geometry_msgs::msg::PoseStamped msg;
-    // msg.header.frame_id = "base_link";
+    msg.header.frame_id = "base_link";
     // msg.pose.orientation = tf2::toMsg(orientation);;
     msg.pose.position.x = request->goal.position.x;
     msg.pose.position.y = request->goal.position.y;
