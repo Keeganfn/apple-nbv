@@ -12,6 +12,8 @@ import sensor_msgs_py.point_cloud2 as pc2
 from std_msgs.msg import Float64
 from geometry_msgs.msg import Pose, Point, Quaternion
 from nbv_interfaces.srv import MoveArm, RunNBV
+from nbv_interfaces.msg import VolumeEstimatesArray
+
 
 
 import numpy as np
@@ -39,6 +41,20 @@ class SphereFitting(Node):
         )
         self.filtered_pc: np.ndarray
 
+        # Publishers
+        self._spheres: np.ndarray = np.empty(5, dtype=Sphere)
+        self._pub_volume_estimates = self.create_publisher(
+            msg_type=VolumeEstimatesArray,
+            topic="apples/volume_estimates",
+            qos_profile=1
+        )
+
+        # Timers
+        self._timer_volume_estimates = self.create_timer(
+            timer_period_sec=0.1,
+            callback=self._timer_cb_volume_estimates
+        )
+
         # Services servers
         self._srv_cb_group = ReentrantCallbackGroup()
         self._srv_done_event = Event()
@@ -63,6 +79,12 @@ class SphereFitting(Node):
         self.phi_bin = np.linspace(0, np.pi, 2 + 1)
         return
     
+    def _timer_cb_volume_estimates(self):
+        msg = VolumeEstimatesArray()
+        msg.data = [sphere.volume_estimate[0] for sphere in self._spheres if sphere is not None]
+        self._pub_volume_estimates.publish(msg)
+        return
+    
     def _svr_cb_run_nbv(self, request, response):
         self.info_logger("RUN NBV service requested")
         if not self._srv_move_arm.wait_for_service(timeout_sec=5.0):
@@ -77,7 +99,7 @@ class SphereFitting(Node):
         try:
             xyz, quat = self.get_nbv_vec(cloud=self.filtered_pc)
             
-            self.warn_logger(f'{xyz}, {quat}')
+            # self.warn_logger(f'{xyz}, {quat}')
             pose = Pose(
                 position=Point(x=xyz[0], y=-xyz[2] ,z=xyz[1]),
                 orientation=Quaternion(x=quat[0], y=quat[1], z=quat[2], w=quat[3])
@@ -152,8 +174,8 @@ class SphereFitting(Node):
             cluster_centers.append([x_average, y_average, x_range, y_range])
         return cluster_centers
 
-    def upsample(self, cloud, cluster_centers):
-        cloud_list = [[], [], [], [], []]
+    def upsample(self, cloud, cluster_centers):        
+        cloud_list = [ [] for _ in range(len(cluster_centers))]
         x = cloud[:, 0]
         y = cloud[:, 2]
         z = cloud[:, 1]
@@ -244,7 +266,7 @@ class SphereFitting(Node):
 
             # Add the sphere to our list
             spheres[i] = sphere
-
+        self._spheres = spheres
         return spheres
     
     def get_vector(self, spheres):
@@ -264,10 +286,10 @@ class SphereFitting(Node):
                 _sphere.min_bin = _bin
         except Exception as e:
             self.err_logger(e)
-
-        self.warn_logger(spheres)
-
+            
         sphere = spheres[np.argmin([_sphere.min_bin for _sphere in spheres if _sphere is not None])]
+
+        self.info_logger(f"Sphere min bin: {sphere.min_bin}")
 
         full_bin=sphere.bins[_bin]
         #I think this is in global frame?? (z up, x left to right, y into page) need to check this frame
@@ -281,12 +303,22 @@ class SphereFitting(Node):
         unit_vector=np.array([x,y,z])
         camera_orientation=-1*unit_vector
 
+        self.warn_logger(f"xyz: {[x, y, z]}")
+        self.warn_logger(f"camera_orientation{camera_orientation}")
+        
+
         base_link_v = np.array([0,0,1])
-        a = np.cross(-base_link_v, camera_orientation)
+        a = np.cross(base_link_v, camera_orientation)
+
+        self.warn_logger(a)
+
         w = np.sqrt(np.linalg.norm(base_link_v)**2 * np.linalg.norm(camera_orientation)**2) + np.dot(base_link_v, camera_orientation)
+
+        self.warn_logger(f"w: {w}")
         q = np.append(a,w)
         q = q / np.linalg.norm(q)
-        self.warn_logger(q)
+
+        self.warn_logger(f'quat: {q}')
         #subject to change, uses the y distance to center sphere from scan (may be unreachable, may want to use different approach)
         camera_coords=[sphere.center_x[0], sphere.center_y[0], sphere.center_z[0]] + 0.9*unit_vector*sphere.center_y
         camera_coords=np.array(camera_coords)

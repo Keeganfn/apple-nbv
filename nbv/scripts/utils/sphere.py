@@ -19,3 +19,4 @@ class Sphere:
         self.phi_bin_counts: dict = {}
         self.bins: dict = {}
         self.min_bin: Union[int, None] = None
+        self.volume_estimate=(4/3)*np.pi*radius**3

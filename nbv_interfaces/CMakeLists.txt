@@ -17,6 +17,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/MoveArm.srv"
   "srv/MoveToNamedTarget.srv"
   "srv/RunNBV.srv"
+  "msg/VolumeEstimatesArray.msg"
   DEPENDENCIES 
   std_msgs
   geometry_msgs
