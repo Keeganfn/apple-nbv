@@ -76,7 +76,8 @@ def get_cluster_center(data, clusters):
 
 
 def upsample(cloud: np.ndarray, cluster_centers: list, graph: bool = False):
-    cloud_list = [[], [], [], [], []]
+    #cloud_list = [[], [], [], [], []]
+    cloud_list=[[] for _ in range(len(cluster_centers))]
     x = cloud[:, 0]
     y = cloud[:, 1]
     z = cloud[:, 2]
@@ -208,7 +209,6 @@ def get_vector(spheres, num_bins: int = 8):
         except:
             completed = True
             break
-
         front_bins = {}
         for i in range(1, 8 + 1):
             if i < 5:
@@ -220,13 +220,12 @@ def get_vector(spheres, num_bins: int = 8):
         full_bin = sphere.bins[bin]
 
 
-
     # I think this is in global frame?? (z up, x left to right, y into page) need to check this frame
     # from https://stackoverflow.com/questions/30011741/3d-vector-defined-by-2-angles
-    theta = full_bin[1] + 2 * np.pi / num_bins
+    theta = full_bin[1] +  np.pi / num_bins
     phi = full_bin[2] + np.pi / 4
-    x = np.sin(theta) * np.cos(phi)
-    y = -np.cos(theta) * np.cos(phi)
+    x = np.cos(theta) * np.cos(phi- np.pi / 2)
+    y = np.sin(theta) * np.cos(phi- np.pi / 2)
     # have to offset to get the bottom half of the sphere to be negative
     z = np.sin(phi - np.pi / 2)
     unit_vector = np.array([x, y, z])
@@ -248,45 +247,6 @@ def get_vector(spheres, num_bins: int = 8):
         camera_orientation = [new_coords_to_center] / orientation_len
     print(completed)
     return camera_coords, camera_orientation, completed
-
-
-def get_spheres_polar(cloud_list, degree_step):
-    centers = []
-    radii = []
-    all_spheres_point_totals = []
-    # running sum of all points to check that they all get assigned
-    rs = 0
-    degrees = range(-180, 180, degree_step)
-    quadrants = []
-    # what are the quadrants?? same poitn could be described with two different angles
-
-    # print(quadrants)
-    for cloud in cloud_list:
-        cloud = np.array(cloud)
-        x_vals = cloud[:, 0]
-        y_vals = cloud[:, 1]
-        z_vals = cloud[:, 2]
-        sphere = sphereFit(x_vals, y_vals, z_vals)
-        centers.append([sphere[1][0], sphere[2][0], sphere[3][0]])
-        radius = sphere[0]
-        radii.append(radius)
-        # convert to polar
-        polar_points = []
-        for point in cloud:
-            # get x,y,z relative to cloud center
-            x, y, z = point - [sphere[1][0], sphere[2][0], sphere[3][0]]
-            # find the two angles
-            t1 = np.arctan2(y, x) * 180 / np.pi
-            t2 = np.arctan2(z, x) * 180 / np.pi
-            r = np.sqrt(x ** 2 + y ** 2 + z ** 2)
-            polar_points.append([t1, t2, r])
-        # apple radius is usually .048ish
-        # degree range: -180 to 180
-        radius_max = radius * 1.1
-        radius_min = radius * .9
-
-    # print(rs)
-    return centers, radii, all_spheres_point_totals
 
 
 # from https://stackoverflow.com/questions/64656951/plotting-spheres-of-radius-r
@@ -453,6 +413,22 @@ def test_cluster():
         x_range = ((x_max - x_min) * 1.5) / 2
         cluster_centers.append([x_average, y_average, x_range, y_range])
 
+def test_get_vector(spheres, num_bins: int = 8):
+    sphere=spheres[0]
+    bin=12
+    full_bin = sphere.bins[bin]
+    theta = full_bin[1] +  np.pi / num_bins
+    phi = full_bin[2] + np.pi / 4
+    x = np.cos(theta) * np.cos(phi- np.pi / 2)
+    y = np.sin(theta) * np.cos(phi- np.pi / 2)
+    # have to offset to get the bottom half of the sphere to be negative
+    z = np.sin(phi - np.pi / 2)
+    unit_vector = np.array([x, y, z])
+    camera_orientation = -1 * unit_vector
+    # subject to change, uses the y distance to center sphere from scan (may be unreachable, may want to use different approach)
+    camera_coords = [sphere.center_x[0], sphere.center_y[0], sphere.center_z[0]] + unit_vector * sphere.center_y
+    camera_coords = np.array(camera_coords)
+    coord_radius = np.sqrt(camera_coords[0] ** 2 + camera_coords[1] ** 2 + camera_coords[2])
 
 def main():
     from objprint import op
@@ -461,8 +437,8 @@ def main():
     cloud_list = upsample(cloud, cluster_centers, graph=False)
     spheres = get_spheres(cloud_list)
     get_vector(spheres)
-    # op(spheres)
-    test_cluster()
+    #op(spheres)
+    test_get_vector(spheres)
     return
 
 

@@ -15,4 +15,5 @@ class Sphere:
         self.theta_bin_counts: dict = {}
         self.phi_bin_counts: dict = {}
         self.bins: dict = {}
+        self.volume_estimate=(4/3)*np.pi*radius**3
 
