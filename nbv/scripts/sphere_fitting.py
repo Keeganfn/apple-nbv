@@ -310,43 +310,42 @@ class SphereFitting(Node):
         self.warn_logger(f"phi: {phi}")
         self.warn_logger(f"unit_vector: {unit_vector}")
         
+        self.warn_logger(f"Sphere center: {sphere.center}")
 
 
         #subject to change, uses the y distance to center sphere from scan (may be unreachable, may want to use different approach)
-        camera_coords=[sphere.center_x[0], sphere.center_y[0], sphere.center_z[0]] + 0.9*unit_vector*sphere.center_y
-        camera_coords=np.array(camera_coords)
+        camera_coords=np.add([sphere.center_x[0], sphere.center_y[0], sphere.center_z[0]], unit_vector*sphere.center_x)
+        # camera_coords = np.array([0.5, 0.5, 0.5])
+        self.warn_logger(f"camera_coords: {camera_coords}")
+        # camera_coords=np.array(camera_coords)
+        
         coord_radius=np.sqrt(camera_coords[0]**2+camera_coords[1]**2+camera_coords[2]**2)
-        #if trying to move out of 90% of max reach
-        if coord_radius>.85*.9:
+        # #if trying to move out of 90% of max reach
+        if coord_radius>1*.9:
             self.info_logger("ENTERED IF STATEMENT")
             scaling=(.85*.9)/coord_radius
             camera_coords=camera_coords*scaling
-            #adjust orienation
-            new_coords_to_center=[sphere.center_x[0], sphere.center_y[0], sphere.center_z[0]]-camera_coords
-            #new camera orientation is unit vector pointed at center
-            #get length of vector
-            orientation_len=np.sqrt(new_coords_to_center[0]**2+new_coords_to_center[1]**2+new_coords_to_center[2]**2)
-            camera_orientation=np.array([new_coords_to_center])[0]/orientation_len
 
-        self.warn_logger(f"camera_orientation{camera_orientation}")
+        # Get the orientation to the center of the apple
+        vec_camera_to_apple = np.subtract(sphere.center.T, camera_coords)
+        self.info_logger((sphere.center.T, camera_coords))
+        vec_camera_to_apple =(vec_camera_to_apple / np.linalg.norm(vec_camera_to_apple))[0]
+        
+        self.info_logger(f"vec: {vec_camera_to_apple}")
+        self.warn_logger(f"camera_orientation{camera_orientation}")        
 
-        base_link_v = np.array([0,0,1])
-        a = np.cross(base_link_v, camera_orientation)
+        roll = np.pi / 2 # Constant, since apples start in x direction, point eef toward apples, then pitch, yaw
+        pitch = np.arcsin(vec_camera_to_apple[1])
+        yaw = np.arctan2(vec_camera_to_apple[0], vec_camera_to_apple[2])
 
-        # self.warn_logger(a)
+        self.info_logger(f"rpy: {(roll, pitch, yaw)}")
 
-        w = np.sqrt(np.linalg.norm(base_link_v)**2 * np.linalg.norm(camera_orientation)**2) + np.dot(base_link_v, camera_orientation)
+        quat = Rotation.from_euler('xyz', [roll, pitch, yaw]).as_quat()
 
-        self.warn_logger(f"w: {w}")
-        # Create q and normalize it
-        q = np.append(a,w)
-        q = q / np.linalg.norm(q)
-
-        self.warn_logger(f'quat: {q}')
-
+        self.warn_logger(f'quat: {quat}')
 
         # camera_orientation = Rotation.from_euler(seq='xyz', angles=camera_orientation, degrees=False).as_quat()[0]
-        return camera_coords, q
+        return camera_coords, quat
 
     def get_nbv_vec(self, cloud):
         # ft.pipe(
