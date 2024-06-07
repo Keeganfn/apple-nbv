@@ -9,12 +9,9 @@ from rclpy.node import Node
 
 from sensor_msgs.msg import PointCloud2
 import sensor_msgs_py.point_cloud2 as pc2
-from std_msgs.msg import Float64
 from geometry_msgs.msg import Pose, Point, Quaternion
-from nbv_interfaces.srv import MoveArm, RunNBV
+from nbv_interfaces.srv import MoveArm, RunNBV, SetSphereConstraint
 from nbv_interfaces.msg import VolumeEstimatesArray
-
-
 
 import numpy as np
 import scipy.cluster.hierarchy as hcluster
@@ -22,10 +19,9 @@ from scipy.spatial.transform import Rotation
 import matplotlib.pyplot as plt
 from threading import Event
 
-from toolz import functoolz as ft
 from typing import Union
 
-from objprint import op
+import secrets
 
 
 class SphereFitting(Node):
@@ -56,27 +52,36 @@ class SphereFitting(Node):
         )
 
         # Services servers
-        self._srv_cb_group = ReentrantCallbackGroup()
-        self._srv_done_event = Event()
+        # self._srv_cb_group_move_arm_group = ReentrantCallbackGroup()
+        self.reentrant_cb_group = ReentrantCallbackGroup()
+        self._srv_move_arm_done_event = Event()
+        self._srv_set_sphere_constraint_done_event = Event()
 
         self._svr_run_nbv = self.create_service(
             srv_type=RunNBV,
             srv_name="run_nbv",
             callback=self._svr_cb_run_nbv,
-            callback_group=self._srv_cb_group
+            callback_group=self.reentrant_cb_group
         )
 
         # Service clients
         self._srv_move_arm = self.create_client(
             srv_name="/move_arm",
             srv_type=MoveArm,
-            callback_group=self._srv_cb_group
+            callback_group=self.reentrant_cb_group
+        )
+        self._srv_set_sphere_constraint = self.create_client(
+            srv_name="/set_sphere_constraint",
+            srv_type=SetSphereConstraint,
+            callback_group=self.reentrant_cb_group
         )
 
         # NBV bin data
         self.num_bins = num_bins
         self.theta_bin = np.linspace(-np.pi, np.pi, num_bins + 1)
         self.phi_bin = np.linspace(0, np.pi, 2 + 1)
+
+        self._target_sphere: Sphere = None
         return
     
     def _timer_cb_volume_estimates(self):
@@ -87,34 +92,65 @@ class SphereFitting(Node):
     
     def _svr_cb_run_nbv(self, request, response):
         self.info_logger("RUN NBV service requested")
-        if not self._srv_move_arm.wait_for_service(timeout_sec=5.0):
-            self.err_logger("Service unavailable.")
-            return response
         
-        self._srv_done_event.clear()
+        self._srv_move_arm_done_event.clear()
+        self._srv_set_sphere_constraint_done_event.clear()
 
-        # event = Event()
         self.inner_response = None
 
+        # Step 1: Remove any old collision objects from last run, if any
+        # TODO: this method needs consistent object IDs
+
+        # Step 2: Add the new collision objects calculated from `get_nbv_vec()`
+        xyz, quat = self.get_nbv_vec(cloud=self.filtered_pc)
+
+        self.info_logger(f"TARGET SPHERE: {self._target_sphere.radius}")
+        self.info_logger(f"Sphere centers: \n{[sphere.center for sphere in self._spheres]}")
+
+        for sphere in self._spheres:
+            try:
+                sphere_constraint = SetSphereConstraint.Request()
+                sphere_constraint.id = str(secrets.randbits(128))
+                sphere_constraint.radius = float(sphere.radius)
+                sphere_constraint.pose = Pose(
+                    position=Point(
+                        x=float(sphere.center_x),
+                        y=float(sphere.center_z),
+                        z=float(sphere.center_y)
+                    ),
+                    orientation=Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
+                )
+                sphere_constraint.remove_from_scene = False
+
+                future = self._srv_set_sphere_constraint.call_async(request=sphere_constraint)
+                future.add_done_callback(self.set_sphere_constraint_inner_callback)
+                self._srv_set_sphere_constraint_done_event.wait()
+
+            except Exception as e:
+                response.success = False
+                self.err_logger(f"HELLO WORLD: {e}")
+
+            self.inner_response = None
+
+
+        if not self._srv_move_arm.wait_for_service(timeout_sec=5.0):
+            self.err_logger("Service unavailable.")
+            response.success = False
+            return response
+        
+
+        # Step 3: Move the arm to the calculated Pose
         try:
-            xyz, quat = self.get_nbv_vec(cloud=self.filtered_pc)
-            
-            # self.warn_logger(f'{xyz}, {quat}')
             pose = Pose(
                 position=Point(x=xyz[0], y=-xyz[2] ,z=xyz[1]),
                 orientation=Quaternion(x=quat[0], y=quat[1], z=quat[2], w=quat[3])
             )
-            # pose = Pose(
-            #     position=Point(x=0.35, y=0.0 ,z=0.60),
-            #     orientation=Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
-            # )
             move_arm = MoveArm.Request()
             move_arm.goal = pose
-
             future = self._srv_move_arm.call_async(request=move_arm)
-            future.add_done_callback(self.inner_callback)
+            future.add_done_callback(self.move_arm_inner_callback)
 
-            self._srv_done_event.wait()
+            self._srv_move_arm_done_event.wait()
             if self.inner_response:
                 response.success = True
             else:
@@ -124,15 +160,24 @@ class SphereFitting(Node):
             self.warn_logger(e)
         return response
     
-    def inner_callback(self, future):
+    def move_arm_inner_callback(self, future):
         try:
             self.inner_response = future.result()
         except Exception as e:
-            self.err_logger(f"Service call failed: {e}")
+            self.err_logger(f"Move arm service call failed: {e}")
             self.inner_response = None
         finally:
-            self._srv_done_event.set()
+            self._srv_move_arm_done_event.set()
         return
+    
+    def set_sphere_constraint_inner_callback(self, future):
+        try:
+            self.inner_response = future.result()
+        except Exception as e:
+            self.err_logger(f"Set sphere constraint service call failed: {e}")
+            self.inner_response = None
+        finally:
+            self._srv_set_sphere_constraint_done_event.set()
 
     def _sub_cb_octomap_pc(self, msg: PointCloud2) -> None:
         """Subscriber to the filtered point cloud from image_processor.py"""
@@ -270,24 +315,25 @@ class SphereFitting(Node):
         return spheres
     
     def get_vector(self, spheres):
-        try:
-            for _sphere in spheres:
-                #get the front bins only
-                if not _sphere.bins:
-                    continue
-                front_bins={}
-                for bin_id, val in _sphere.bins.items():
-                    if bin_id in [1,2,3,4,9,10,11,12]:
-                        _bin = val
-                    front_bins[bin_id] = _bin
+        # try:
+        for _sphere in spheres:
+            #get the front bins only
+            if _sphere is None:
+                continue
+            front_bins={}
+            for bin_id, val in _sphere.bins.items():
+                if bin_id in [1,2,3,4,9,10,11,12]:
+                    _bin = val
+                front_bins[bin_id] = _bin
 
-                #do we need a threshold for filled bins?? x number of points in each bin before going to next apple
-                _bin=min(front_bins, key=front_bins.get)
-                _sphere.min_bin = _bin
-        except Exception as e:
-            self.err_logger(e)
+            #do we need a threshold for filled bins?? x number of points in each bin before going to next apple
+            _bin=min(front_bins, key=front_bins.get)
+            _sphere.min_bin = _bin
+        # except Exception as e:
+        #     self.err_logger(e)
             
         sphere = spheres[np.argmin([_sphere.min_bin for _sphere in spheres if _sphere is not None])]
+        self._target_sphere = sphere
 
         self.info_logger(f"Sphere min bin: {sphere.min_bin}")
 
@@ -318,7 +364,7 @@ class SphereFitting(Node):
         # camera_coords = np.array([0.5, 0.5, 0.5])
         self.warn_logger(f"camera_coords: {camera_coords}")
         # camera_coords=np.array(camera_coords)
-        
+
         coord_radius=np.sqrt(camera_coords[0]**2+camera_coords[1]**2+camera_coords[2]**2)
         # #if trying to move out of 90% of max reach
         if coord_radius>1*.9:
