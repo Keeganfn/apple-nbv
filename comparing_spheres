@@ -1,0 +1,65 @@
+##testing process
+def compare_spheres():
+    # define old spheres
+    os1 = Sphere(.5, .5, .5, .05)
+    os2 = Sphere(.2, .2, .2, .05)
+    os3 = Sphere(-.5, -.5, -.5, .05)
+    # add noise and define new spheres
+    noise = np.random.rand(1, 4) * .1
+    n1c = [.5, .5, .5, .05] + noise
+    n2c = [.2, .2, .2, .05] + noise
+    n3c = [-.5, -.5, -.5, .05] + noise
+    ns1 = Sphere(n1c[0][0], n1c[0][1], n1c[0][2], n1c[0][3])
+    ns2 = Sphere(n2c[0][0], n2c[0][1], n2c[0][2], n2c[0][3])
+    ns3 = Sphere(n3c[0][0], n3c[0][1], n3c[0][2], n3c[0][3])
+    ns4 = Sphere(n3c[0][0], n3c[0][1] - .3, n3c[0][2] - .2, n3c[0][3])
+    ns5 = Sphere(n3c[0][0], n3c[0][1] - .3, n3c[0][2] + .2, n3c[0][3])
+    # make lists
+    # replace with self._spheres
+    old_spheres = [os1, os2, os3]
+    new_spheres = [ns1, ns2, ns3, ns4, ns5]
+    for n_sphere in new_spheres:
+        n_center = n_sphere.center
+        matched = False
+        for i, o_sphere in enumerate(old_spheres):
+            o_center = o_sphere.center
+            # check if they're close, change tolerance if necessary
+            close = np.isclose(o_center, n_center, rtol=.1, atol=.1)
+            if all(close):
+                n_sphere.id = old_spheres[i].id
+                old_spheres[i] = n_sphere
+                matched = True
+        if not matched:
+            # don't know a cleaner way to do this, can't use max(old_spheres.id)
+            ids = []
+            for sphere in old_spheres:
+                ids.append(sphere.id)
+            new_id = max(ids) + 1
+            n_sphere.id = new_id
+            old_spheres.append(n_sphere)
+    for sphere in old_spheres:
+        print(sphere.id)
+
+  ##to put in code between lines 313 and 314
+  old_spheres = self._spheres
+  new_spheres = spheres
+  for n_sphere in new_spheres:
+      n_center = n_sphere.center
+      matched = False
+      for i, o_sphere in enumerate(old_spheres):
+          o_center = o_sphere.center
+          # check if they're close, change tolerance if necessary
+          close = np.isclose(o_center, n_center, rtol=.1, atol=.1)
+          if all(close):
+              n_sphere.id = old_spheres[i].id
+              old_spheres[i] = n_sphere
+              matched = True
+      if not matched:
+          # don't know a cleaner way to do this, can't use max(old_spheres.id)
+          ids = []
+          for sphere in old_spheres:
+              ids.append(sphere.id)
+          new_id = max(ids) + 1
+          n_sphere.id = new_id
+          old_spheres.append(n_sphere)
+  self._spheres = old_spheres
