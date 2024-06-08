@@ -22,6 +22,8 @@ from threading import Event
 from typing import Union
 
 import secrets
+import open3d as o3d
+import pyransac3d as pyrsc
 
 
 class SphereFitting(Node):
@@ -82,11 +84,12 @@ class SphereFitting(Node):
         self.phi_bin = np.linspace(0, np.pi, 2 + 1)
 
         self._target_sphere: Sphere = None
+        self.nbv_first_run_done = False
         return
     
     def _timer_cb_volume_estimates(self):
         msg = VolumeEstimatesArray()
-        msg.data = [sphere.volume_estimate[0] for sphere in self._spheres if sphere is not None]
+        msg.data = [sphere.volume_estimate for sphere in self._spheres if sphere is not None]
         self._pub_volume_estimates.publish(msg)
         return
     
@@ -115,8 +118,8 @@ class SphereFitting(Node):
                 sphere_constraint.pose = Pose(
                     position=Point(
                         x=float(sphere.center_x),
-                        y=float(sphere.center_z),
-                        z=float(sphere.center_y)
+                        y=float(sphere.center_y),
+                        z=float(sphere.center_z)
                     ),
                     orientation=Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
                 )
@@ -142,7 +145,7 @@ class SphereFitting(Node):
         # Step 3: Move the arm to the calculated Pose
         try:
             pose = Pose(
-                position=Point(x=xyz[0], y=-xyz[2] ,z=xyz[1]),
+                position=Point(x=xyz[0], y=xyz[1] ,z=xyz[2]),
                 orientation=Quaternion(x=quat[0], y=quat[1], z=quat[2], w=quat[3])
             )
             move_arm = MoveArm.Request()
@@ -184,14 +187,60 @@ class SphereFitting(Node):
         self.filtered_pc = pc2.read_points_numpy(msg, ["x", "y", "z"])        
         return
 
-    def xy_clustering(self, cloud, graph=False):
-        thresh=.015
+    def _xy_clustering(self, cloud, graph=False):
+        if self.nbv_first_run_done:
+            thresh = 0.009
+        else:
+            thresh = 0.015
+            self.nbv_first_run_done = True
         clusters = hcluster.fclusterdata(cloud, thresh, criterion="distance")
         if graph:
             plt.scatter(*np.transpose(data), c=clusters)
             plt.axis("equal")
             plt.show()
         return clusters
+    
+    def xy_clustering(self, cloud): 
+        
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(cloud)
+
+        with o3d.utility.VerbosityContextManager(
+                o3d.utility.VerbosityLevel.Debug) as cm:
+            labels = np.array(
+                pcd.cluster_dbscan(eps=0.05, min_points=10, print_progress=True))
+
+        max_label = labels.max()
+        print(f"point cloud has {max_label + 1} clusters")
+        colors = plt.get_cmap("tab20")(labels / (max_label if max_label > 0 else 1))
+        colors[labels < 0] = 0
+
+        pcd.colors = o3d.utility.Vector3dVector(colors[:, :3])
+        # o3d.visualization.draw_geometries([pcd])
+
+        self.info_logger(labels)
+
+        pc_unlabeled = np.array(pcd.points)
+        apple_cluster_points = []
+        apple_spheres = []
+
+        for i in range(max_label + 1):
+            # Gives a Nx3 numpy array of all the apple points in mask i 
+            label_mask = (labels == i)
+            apple_pc = pc_unlabeled[label_mask]
+            sph = pyrsc.Sphere()
+            # center, radius, inliers = sph.fit(apple_pc, thresh=.001)
+            threshs = [.01, .005, .001, .0001, .00001]
+            for j in threshs:
+                center, radius, inliers = sph.fit(apple_pc, thresh=j)
+                if radius < .06 and radius > .04:
+                    break
+
+            self.info_logger(f"\nCluster: {i}\nCenter: {center}\nRadius: {radius}")
+
+            apple_cluster_points.append(apple_pc)
+            apple_spheres.append(Sphere(radius=radius, center_x=center[0], center_y=center[1], center_z=center[2]))
+        return apple_cluster_points, apple_spheres
 
     def get_cluster_center(self, data, clusters):
         stacked_array = []
@@ -224,11 +273,10 @@ class SphereFitting(Node):
         data = np.dstack((x, y, z))[0]
 
         # empty array to put designated cluster in
-        clusters = []
+        # clusters = []
         for i, point in enumerate(data):
             cloud_list[clusters[i]-1].append(point)
         return cloud_list
-
 
     def sphereFit(self, spX, spY, spZ) -> Sphere:
         #   Assemble the A matrix
@@ -254,15 +302,16 @@ class SphereFitting(Node):
 
         return sphere
 
-    def get_spheres(self, cloud_list) -> Union[list, None]:
-        spheres = np.empty(len(cloud_list), dtype=Sphere)
+    def get_spheres(self, cloud_list, spheres) -> Union[list, None]:
+        # spheres = np.empty(len(cloud_list), dtype=Sphere)
 
         for i, cloud in enumerate(cloud_list):
-            if not cloud:
-                continue
+            # if not cloud:
+            #     continue
             # Fit a sphere to the cloud
             cloud = np.array(cloud)
-            sphere = self.sphereFit(cloud[:, 0], cloud[:, 1], cloud[:, 2])
+            # sphere = self.sphereFit(cloud[:, 0], cloud[:, 1], cloud[:, 2])
+            sphere = spheres[i]
             # Find theta and phi for each point in the cloud with respect to the center of the sphere.
             cloud_xyz = np.subtract(cloud, sphere.center.T)
             cloud_thetas = np.arctan2(cloud_xyz[:, 2], cloud_xyz[:, 0])
@@ -321,35 +370,37 @@ class SphereFitting(Node):
         sphere = spheres[np.argmin([_sphere.min_bin for _sphere in spheres if _sphere is not None])]
         self._target_sphere = sphere
 
-        self.info_logger(f"Sphere min bin: {sphere.min_bin}")
+        # self.info_logger(f"Sphere min bin: {sphere.min_bin}")
 
         full_bin=sphere.bins[_bin]
         #I think this is in global frame?? (z up, x left to right, y into page) need to check this frame
         #from https://stackoverflow.com/questions/30011741/3d-vector-defined-by-2-angles
         theta = full_bin[1] +  np.pi / self.num_bins
         phi = full_bin[2] + np.pi / 4
-        y = np.cos(theta) * np.cos(phi- np.pi / 2)
-        x = np.sin(theta) * np.cos(phi- np.pi / 2)
+        y = np.cos(theta) * np.cos(phi - np.pi / 2)
+        x = np.sin(theta) * np.cos(phi - np.pi / 2)
         # have to offset to get the bottom half of the sphere to be negative
         z = np.sin(phi - np.pi / 2)
         unit_vector=np.array([x,y,z])
         unit_vector = unit_vector / np.linalg.norm(unit_vector)
         camera_orientation=-1*unit_vector
 
-        self.warn_logger(f"bin: {_bin}")
-        self.warn_logger(f"xyz: {[x, y, z]}")
-        self.warn_logger(f"theta: {theta}")
-        self.warn_logger(f"phi: {phi}")
-        self.warn_logger(f"unit_vector: {unit_vector}")
+        # self.warn_logger(f"bin: {_bin}")
+        # self.warn_logger(f"xyz: {[x, y, z]}")
+        # self.warn_logger(f"theta: {theta}")
+        # self.warn_logger(f"phi: {phi}")
+        # self.warn_logger(f"unit_vector: {unit_vector}")
         
-        self.warn_logger(f"Sphere center: {sphere.center}")
+        
 
 
         #subject to change, uses the y distance to center sphere from scan (may be unreachable, may want to use different approach)
-        camera_coords=np.add([sphere.center_x[0], sphere.center_y[0], sphere.center_z[0]], unit_vector*sphere.center_x)
+        camera_coords=np.add([sphere.center_x, sphere.center_y, sphere.center_z], unit_vector*sphere.center_x)
         # camera_coords = np.array([0.5, 0.5, 0.5])
-        self.warn_logger(f"camera_coords: {camera_coords}")
         # camera_coords=np.array(camera_coords)
+
+        if camera_coords[2] < 0.05:
+            camera_coords[2] = 0.05
 
         coord_radius=np.sqrt(camera_coords[0]**2+camera_coords[1]**2+camera_coords[2]**2)
         # #if trying to move out of 90% of max reach
@@ -358,36 +409,38 @@ class SphereFitting(Node):
             scaling=(.85*.9)/coord_radius
             camera_coords=camera_coords*scaling
 
-        # Get the orientation to the center of the apple
-        vec_camera_to_apple = np.subtract(sphere.center.T, camera_coords)
-        self.info_logger((sphere.center.T, camera_coords))
-        vec_camera_to_apple =(vec_camera_to_apple / np.linalg.norm(vec_camera_to_apple))[0]
-        
+                
+
+        camera_coords = np.array([0.5, 0.5, 0.5])
+
+        self.warn_logger(f"camera_coords: {camera_coords}")
+        self.warn_logger(f"Sphere center: {sphere.center}")
+
+        # Get the unit vector pointing from desired camera position to the center of the apple
+        vec_camera_to_apple = sphere.center - camera_coords
+        vec_camera_to_apple = vec_camera_to_apple / np.linalg.norm(vec_camera_to_apple)
+
         self.info_logger(f"vec: {vec_camera_to_apple}")
-        self.warn_logger(f"camera_orientation{camera_orientation}")        
 
-        roll = np.pi / 2 # Constant, since apples start in x direction, point eef toward apples, then pitch, yaw
-        pitch = np.arcsin(vec_camera_to_apple[1])
-        yaw = np.arctan2(vec_camera_to_apple[0], vec_camera_to_apple[2])
-
-        self.info_logger(f"rpy: {(roll, pitch, yaw)}")
-
-        quat = Rotation.from_euler('xyz', [roll, pitch, yaw]).as_quat()
+        coor_frame = np.identity(3)
+        z_axis = coor_frame[2]
+        
+        # Get rotational vector, convert to quaternion
+        rot_axis = np.cross(z_axis, vec_camera_to_apple)
+        rot_angle = np.arccos(np.dot(z_axis, vec_camera_to_apple)) # both vectors are unit vectors
+        self.info_logger(f"Cross: {rot_axis}")
+        rotation = Rotation.from_rotvec(rotvec=rot_angle * rot_axis)
+        self.info_logger(f"\nRot mat:\n{rotation.as_euler('xyz', degrees=True)}")
+        quat = rotation.as_quat()
 
         self.warn_logger(f'quat: {quat}')
 
-        # camera_orientation = Rotation.from_euler(seq='xyz', angles=camera_orientation, degrees=False).as_quat()[0]
         return camera_coords, quat
 
     def get_nbv_vec(self, cloud):
-        # ft.pipe(
-        #     cloud,
-        # )
-        #data, clusters = self.xy_clustering(cloud)
-        clusters = self.xy_clustering(cloud)
-        #cluster_centers = self.get_cluster_center(data, clusters)
-        cloud_list = self.upsample(cloud, clusters)
-        spheres = self.get_spheres(cloud_list=cloud_list)
+        """Main processing sequence called when run_nbv service is called"""
+        apple_cluster_points, apple_spheres = self.xy_clustering(cloud)
+        spheres = self.get_spheres(cloud_list=apple_cluster_points, spheres=apple_spheres)
         camera_coords, camera_orientation = self.get_vector(spheres)
         return (camera_coords, camera_orientation)
 
