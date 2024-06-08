@@ -185,16 +185,13 @@ class SphereFitting(Node):
         return
 
     def xy_clustering(self, cloud, graph=False):
-        x = cloud[:, 0]  # [0::100]
-        y = cloud[:, 2]  # [0::100]
-        data = np.dstack((x, y))[0]
-        thresh = 0.015
-        clusters = hcluster.fclusterdata(data, thresh, criterion="distance")
+        thresh=.015
+        clusters = hcluster.fclusterdata(cloud, thresh, criterion="distance")
         if graph:
             plt.scatter(*np.transpose(data), c=clusters)
             plt.axis("equal")
             plt.show()
-        return data, clusters
+        return clusters
 
     def get_cluster_center(self, data, clusters):
         stacked_array = []
@@ -219,8 +216,8 @@ class SphereFitting(Node):
             cluster_centers.append([x_average, y_average, x_range, y_range])
         return cluster_centers
 
-    def upsample(self, cloud, cluster_centers):        
-        cloud_list = [ [] for _ in range(len(cluster_centers))]
+    def upsample(self, cloud, clusters):
+        cloud_list = [ [] for _ in range(len(np.unique(clusters)))]
         x = cloud[:, 0]
         y = cloud[:, 2]
         z = cloud[:, 1]
@@ -228,21 +225,10 @@ class SphereFitting(Node):
 
         # empty array to put designated cluster in
         clusters = []
-        for point in data:
-            for i in range(len(cluster_centers)):
-                # self.info_logger(cluster_centers)
-                cluster = cluster_centers[i]
-
-                if (
-                    point[0] > cluster[0] - cluster[2]
-                    and point[0] < cluster[0] + cluster[2]
-                    and point[1] > cluster[1] - cluster[3]
-                    and point[1] < cluster[1] + cluster[3]
-                ):
-                    clusters.append(i)
-                    cloud_list[i].append(point)
-                    break
+        for i, point in enumerate(data):
+            cloud_list[clusters[i]-1].append(point)
         return cloud_list
+
 
     def sphereFit(self, spX, spY, spZ) -> Sphere:
         #   Assemble the A matrix
@@ -397,9 +383,10 @@ class SphereFitting(Node):
         # ft.pipe(
         #     cloud,
         # )
-        data, clusters = self.xy_clustering(cloud)
-        cluster_centers = self.get_cluster_center(data, clusters)
-        cloud_list = self.upsample(cloud, cluster_centers)
+        #data, clusters = self.xy_clustering(cloud)
+        clusters = self.xy_clustering(cloud)
+        #cluster_centers = self.get_cluster_center(data, clusters)
+        cloud_list = self.upsample(cloud, clusters)
         spheres = self.get_spheres(cloud_list=cloud_list)
         camera_coords, camera_orientation = self.get_vector(spheres)
         return (camera_coords, camera_orientation)
