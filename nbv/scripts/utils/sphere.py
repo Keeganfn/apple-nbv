@@ -12,8 +12,8 @@ import itertools
 
 class Sphere:
     id_iter = itertools.count()
-    
-    def __init__(self, center_x: float, center_y, center_z, radius, num_bins=8):
+
+    def __init__(self, center_x: float, center_y, center_z, radius, num_points, num_bins=8):
         self.center_x: float = center_x
         self.center_y: float = center_y
         self.center_z: float = center_z
@@ -24,4 +24,6 @@ class Sphere:
         self.bins: dict = {}
         self.min_bin: Union[int, None] = None
         self.volume_estimate=(4/3)*np.pi*radius**3
-        self.id = next(self.id_iter)
+        self.bins_visited: list = []
+        self.id: int = next(self.id_iter)
+        self.num_points: int = num_points

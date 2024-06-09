@@ -10,8 +10,13 @@ from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2
 import sensor_msgs_py.point_cloud2 as pc2
 from geometry_msgs.msg import Pose, Point, Quaternion
+from std_msgs.msg import Float64
 from nbv_interfaces.srv import MoveArm, RunNBV, SetSphereConstraint
-from nbv_interfaces.msg import VolumeEstimatesArray
+from nbv_interfaces.msg import (
+    VolumeEstimatesArray,
+    Apple,
+    AppleArray
+)
 
 import numpy as np
 import scipy.cluster.hierarchy as hcluster
@@ -46,6 +51,16 @@ class SphereFitting(Node):
             topic="apples/volume_estimates",
             qos_profile=1
         )
+        self._pub_apples = self.create_publisher(
+            msg_type=AppleArray,
+            topic="apples",
+            qos_profile=1
+        )
+        self._pub_target_sphere = self.create_publisher(
+            msg_type=Apple,
+            topic="target_sphere",
+            qos_profile=1
+        )
 
         # Timers
         self._timer_volume_estimates = self.create_timer(
@@ -63,6 +78,12 @@ class SphereFitting(Node):
             srv_type=RunNBV,
             srv_name="run_nbv",
             callback=self._svr_cb_run_nbv,
+            callback_group=self.reentrant_cb_group
+        )
+        self._srv_get_nbv = self.create_service(
+            srv_type=RunNBV,
+            srv_name="get_nbv",
+            callback=self._srv_cb_get_nbv,
             callback_group=self.reentrant_cb_group
         )
 
@@ -91,6 +112,34 @@ class SphereFitting(Node):
         msg = VolumeEstimatesArray()
         msg.data = [sphere.volume_estimate for sphere in self._spheres if sphere is not None]
         self._pub_volume_estimates.publish(msg)
+
+        msg_apple_arr = AppleArray()
+        msg_apple_arr.apples = [Apple(
+            id=sphere.id,
+            radius=sphere.radius,
+            center=Point(
+                x=sphere.center_x,
+                y=sphere.center_y,
+                z=sphere.center_z
+            ),
+            volume=sphere.volume_estimate,
+            num_pc_points=sphere.num_points,
+        ) for sphere in self._spheres if sphere is not None]
+        self._pub_apples.publish(msg=msg_apple_arr)
+
+        if self._target_sphere is not None:
+            msg_target_apple = Apple(
+                id=self._target_sphere.id,
+                radius=self._target_sphere.radius,
+                center=Point(
+                    x=self._target_sphere.center_x,
+                    y=self._target_sphere.center_y,
+                    z=self._target_sphere.center_z,
+                ),
+                volume=self._target_sphere.volume_estimate,
+                num_pc_points=self._target_sphere.num_points,
+            )
+            self._pub_target_sphere.publish(msg=msg_target_apple)
         return
     
     def _svr_cb_run_nbv(self, request, response):
@@ -100,7 +149,6 @@ class SphereFitting(Node):
         self._srv_set_sphere_constraint_done_event.clear()
 
         self.inner_response = None
-
 
         # Step 1: Remove any old collision objects from last run, if any
         if self._spheres:
@@ -186,7 +234,78 @@ class SphereFitting(Node):
                 response.success = False
         except Exception as e:
             response.success = False
-            self.warn_logger(e)
+            self.err_logger(e)
+        return response
+    
+    def _srv_cb_get_nbv(self, request, response):
+        self.info_logger("GET NBV service requested")
+        
+        self._srv_move_arm_done_event.clear()
+        self._srv_set_sphere_constraint_done_event.clear()
+
+        self.inner_response = None
+
+        # Step 1: Remove any old collision objects from last run, if any
+        if self._spheres:
+            for sphere in self._spheres:
+                try:
+                    sphere_constraint = SetSphereConstraint.Request()
+                    sphere_constraint.id = str(sphere.id)
+                    sphere_constraint.radius = float(sphere.radius)
+                    sphere_constraint.pose = Pose(
+                        position=Point(
+                            x=float(sphere.center_x),
+                            y=float(sphere.center_y),
+                            z=float(sphere.center_z)
+                        ),
+                        orientation=Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
+                    )
+                    sphere_constraint.remove_from_scene = True
+
+                    future = self._srv_set_sphere_constraint.call_async(request=sphere_constraint)
+                    future.add_done_callback(self.set_sphere_constraint_inner_callback)
+                    self._srv_set_sphere_constraint_done_event.wait()
+
+                except Exception as e:
+                    response.success = False
+                    self.err_logger(f"Failed to remove collision object with sphere.id = {sphere.id}: {e}")
+
+                self.inner_response = None
+        
+
+        # Step 2: Add the new collision objects calculated from `get_nbv_vec()`
+        xyz, quat = self.get_nbv_vec(cloud=self.filtered_pc)
+
+        # self.info_logger(f"TARGET SPHERE: {self._target_sphere.radius}")
+        # self.info_logger(f"Sphere centers: \n{[sphere.center for sphere in self._spheres]}")
+
+        for sphere in self._spheres:
+            try:
+                sphere_constraint = SetSphereConstraint.Request()
+                sphere_constraint.id = str(sphere.id)
+                sphere_constraint.radius = float(sphere.radius)
+                sphere_constraint.pose = Pose(
+                    position=Point(
+                        x=float(sphere.center_x),
+                        y=float(sphere.center_y),
+                        z=float(sphere.center_z)
+                    ),
+                    orientation=Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
+                )
+                sphere_constraint.remove_from_scene = False
+
+                future = self._srv_set_sphere_constraint.call_async(request=sphere_constraint)
+                future.add_done_callback(self.set_sphere_constraint_inner_callback)
+                self._srv_set_sphere_constraint_done_event.wait()
+
+            except Exception as e:
+                response.success = False
+                self.err_logger(f"Failed to add collision object with sphere.id = {sphere.id}: {e}")
+                return response
+
+            self.inner_response = None
+        
+        response.success = True
         return response
     
     def move_arm_inner_callback(self, future):
@@ -262,10 +381,12 @@ class SphereFitting(Node):
                 if radius < .06 and radius > .04:
                     break
 
+            self.err_logger(apple_pc.shape)
+
             self.info_logger(f"\nCluster: {i}\nCenter: {center}\nRadius: {radius}")
 
             apple_cluster_points.append(apple_pc)
-            apple_spheres.append(Sphere(radius=radius, center_x=center[0], center_y=center[1], center_z=center[2]))
+            apple_spheres.append(Sphere(radius=radius, center_x=center[0], center_y=center[1], center_z=center[2], num_points=apple_pc.shape[0]))
         return apple_cluster_points, apple_spheres
 
     def get_cluster_center(self, data, clusters):
@@ -383,7 +504,6 @@ class SphereFitting(Node):
 
             # if np.allclose(old_spheres, new_spheres, rtol=0.05, atol=0.1):
                 
-
             for n_sphere in new_spheres:
                 n_center = n_sphere.center
                 matched = False
@@ -416,7 +536,9 @@ class SphereFitting(Node):
                 continue
             front_bins={}
             for bin_id, val in _sphere.bins.items():
-                if bin_id in [1,2,3,4,9,10,11,12]:
+                # if bin_id in [1,2,3,4,9,10,11,12]:
+                if bin_id in [1,2,3,4,9,10,11,12] and (_sphere.id,bin_id) not in _sphere.bins_visited:
+
                     _bin = val
                 front_bins[bin_id] = _bin
 
@@ -425,8 +547,17 @@ class SphereFitting(Node):
             _sphere.min_bin = _bin
         # except Exception as e:
         #     self.err_logger(e)
+
+        
             
         sphere = spheres[np.argmin([_sphere.min_bin for _sphere in spheres if _sphere is not None])]
+        #get list of visited bins
+        bins_visited=sphere.bins_visited
+        #add most recent visit
+        bins_visited.append((sphere.id,_bin))
+        #update lists
+        for sphere in self._spheres:
+            sphere.bins_visited=bins_visited
         self._target_sphere = sphere
 
         # self.info_logger(f"Sphere min bin: {sphere.min_bin}")
