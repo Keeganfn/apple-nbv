@@ -68,16 +68,15 @@ class SphereFitting(Node):
             callback=self._timer_cb_volume_estimates
         )
 
-        # Services servers
-        # self._srv_cb_group_move_arm_group = ReentrantCallbackGroup()
+        # Service servers
         self.reentrant_cb_group = ReentrantCallbackGroup()
         self._srv_move_arm_done_event = Event()
         self._srv_set_sphere_constraint_done_event = Event()
 
-        self._svr_run_nbv = self.create_service(
+        self._srv_run_nbv = self.create_service(
             srv_type=RunNBV,
             srv_name="run_nbv",
-            callback=self._svr_cb_run_nbv,
+            callback=self._srv_cb_run_nbv,
             callback_group=self.reentrant_cb_group
         )
         self._srv_get_nbv = self.create_service(
@@ -86,6 +85,12 @@ class SphereFitting(Node):
             callback=self._srv_cb_get_nbv,
             callback_group=self.reentrant_cb_group
         )
+        # self._srv_run_random_pose = self.create_service(
+        #     srv_type=RunNBV,
+        #     srv_name="go_to_random_pose",
+        #     callback=self._srv_cb_go_to_random_pose,
+        #     callback_group=self.reentrant_cb_group
+        # )
 
         # Service clients
         self._srv_move_arm = self.create_client(
@@ -142,7 +147,7 @@ class SphereFitting(Node):
             self._pub_target_sphere.publish(msg=msg_target_apple)
         return
     
-    def _svr_cb_run_nbv(self, request, response):
+    def _srv_cb_run_nbv(self, request, response):
         self.info_logger("RUN NBV service requested")
         
         self._srv_move_arm_done_event.clear()
@@ -308,6 +313,9 @@ class SphereFitting(Node):
         response.success = True
         return response
     
+    # def _srv_cb_go_to_random_pose(self, request, response):
+
+
     def move_arm_inner_callback(self, future):
         try:
             self.inner_response = future.result()

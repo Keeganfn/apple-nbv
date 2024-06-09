@@ -1,0 +1,32 @@
+rosbag2_bagfile_information:
+  version: 5
+  storage_identifier: sqlite3
+  duration:
+    nanoseconds: 53512845271
+  starting_time:
+    nanoseconds_since_epoch: 1717961851922548614
+  message_count: 5778
+  topics_with_message_count:
+    - topic_metadata:
+        name: /joint_states
+        type: sensor_msgs/msg/JointState
+        serialization_format: cdr
+        offered_qos_profiles: "- history: 3\n  depth: 0\n  reliability: 1\n  durability: 1\n  deadline:\n    sec: 9223372036\n    nsec: 854775807\n  lifespan:\n    sec: 9223372036\n    nsec: 854775807\n  liveliness: 1\n  liveliness_lease_duration:\n    sec: 9223372036\n    nsec: 854775807\n  avoid_ros_namespace_conventions: false"
+      message_count: 5243
+    - topic_metadata:
+        name: /apples
+        type: nbv_interfaces/msg/AppleArray
+        serialization_format: cdr
+        offered_qos_profiles: "- history: 3\n  depth: 0\n  reliability: 1\n  durability: 2\n  deadline:\n    sec: 9223372036\n    nsec: 854775807\n  lifespan:\n    sec: 9223372036\n    nsec: 854775807\n  liveliness: 1\n  liveliness_lease_duration:\n    sec: 9223372036\n    nsec: 854775807\n  avoid_ros_namespace_conventions: false"
+      message_count: 535
+  compression_format: ""
+  compression_mode: ""
+  relative_file_paths:
+    - random_2_views1_0.db3
+  files:
+    - path: random_2_views1_0.db3
+      starting_time:
+        nanoseconds_since_epoch: 1717961851922548614
+      duration:
+        nanoseconds: 53512845271
+      message_count: 5778
