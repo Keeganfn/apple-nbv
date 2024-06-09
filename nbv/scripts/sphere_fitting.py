@@ -19,7 +19,7 @@ from scipy.spatial.transform import Rotation
 import matplotlib.pyplot as plt
 from threading import Event
 
-from typing import Union
+from typing import Union, List
 
 import secrets
 import open3d as o3d
@@ -40,7 +40,7 @@ class SphereFitting(Node):
         self.filtered_pc: np.ndarray
 
         # Publishers
-        self._spheres: np.ndarray = np.empty(5, dtype=Sphere)
+        self._spheres: list = []
         self._pub_volume_estimates = self.create_publisher(
             msg_type=VolumeEstimatesArray,
             topic="apples/volume_estimates",
@@ -101,8 +101,34 @@ class SphereFitting(Node):
 
         self.inner_response = None
 
+
         # Step 1: Remove any old collision objects from last run, if any
-        # TODO: this method needs consistent object IDs
+        if self._spheres:
+            for sphere in self._spheres:
+                try:
+                    sphere_constraint = SetSphereConstraint.Request()
+                    sphere_constraint.id = str(sphere.id)
+                    sphere_constraint.radius = float(sphere.radius)
+                    sphere_constraint.pose = Pose(
+                        position=Point(
+                            x=float(sphere.center_x),
+                            y=float(sphere.center_y),
+                            z=float(sphere.center_z)
+                        ),
+                        orientation=Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
+                    )
+                    sphere_constraint.remove_from_scene = True
+
+                    future = self._srv_set_sphere_constraint.call_async(request=sphere_constraint)
+                    future.add_done_callback(self.set_sphere_constraint_inner_callback)
+                    self._srv_set_sphere_constraint_done_event.wait()
+
+                except Exception as e:
+                    response.success = False
+                    self.err_logger(f"Failed to remove collision object with sphere.id = {sphere.id}: {e}")
+
+                self.inner_response = None
+        
 
         # Step 2: Add the new collision objects calculated from `get_nbv_vec()`
         xyz, quat = self.get_nbv_vec(cloud=self.filtered_pc)
@@ -113,7 +139,7 @@ class SphereFitting(Node):
         for sphere in self._spheres:
             try:
                 sphere_constraint = SetSphereConstraint.Request()
-                sphere_constraint.id = str(secrets.randbits(128))
+                sphere_constraint.id = str(sphere.id)
                 sphere_constraint.radius = float(sphere.radius)
                 sphere_constraint.pose = Pose(
                     position=Point(
@@ -131,7 +157,7 @@ class SphereFitting(Node):
 
             except Exception as e:
                 response.success = False
-                self.err_logger(f"HELLO WORLD: {e}")
+                self.err_logger(f"Failed to add collision object with sphere.id = {sphere.id}: {e}")
 
             self.inner_response = None
 
@@ -346,6 +372,39 @@ class SphereFitting(Node):
 
             # Add the sphere to our list
             spheres[i] = sphere
+
+        if not self._spheres:
+            pass
+        else:
+            old_spheres: List[Sphere] = self._spheres
+            new_spheres: List[Sphere] = spheres
+
+            # old_centers = [old_.center for old_ in old_spheres]
+
+            # if np.allclose(old_spheres, new_spheres, rtol=0.05, atol=0.1):
+                
+
+            for n_sphere in new_spheres:
+                n_center = n_sphere.center
+                matched = False
+                for i, o_sphere in enumerate(old_spheres):
+                    o_center = o_sphere.center
+                    # check if they're close, change tolerance if necessary
+                    close = np.isclose(o_center, n_center, rtol=.1, atol=.1)
+                    if all(close):
+                        n_sphere.id = old_spheres[i].id
+                        old_spheres[i] = n_sphere
+                        matched = True
+                if not matched:
+                    # don't know a cleaner way to do this, can't use max(old_spheres.id)
+                    ids = []
+                    for sphere in old_spheres:
+                        ids.append(sphere.id)
+                    new_id = max(ids) + 1
+                    n_sphere.id = new_id
+                    old_spheres.append(n_sphere)
+            self._spheres = old_spheres
+
         self._spheres = spheres
         return spheres
     

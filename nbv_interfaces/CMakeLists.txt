@@ -19,6 +19,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/RunNBV.srv"
   "srv/SetSphereConstraint.srv"
   "msg/VolumeEstimatesArray.msg"
+  "msg/Apple.msg"
+  "msg/AppleArray.msg"
   DEPENDENCIES 
   std_msgs
   geometry_msgs

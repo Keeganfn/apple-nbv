@@ -7,8 +7,12 @@ import numpy as np
 
 from typing import Union
 
+import itertools
+
 
 class Sphere:
+    id_iter = itertools.count()
+    
     def __init__(self, center_x: float, center_y, center_z, radius, num_bins=8):
         self.center_x: float = center_x
         self.center_y: float = center_y
@@ -20,3 +24,4 @@ class Sphere:
         self.bins: dict = {}
         self.min_bin: Union[int, None] = None
         self.volume_estimate=(4/3)*np.pi*radius**3
+        self.id = next(self.id_iter)
