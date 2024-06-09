@@ -399,8 +399,8 @@ class SphereFitting(Node):
         # camera_coords = np.array([0.5, 0.5, 0.5])
         # camera_coords=np.array(camera_coords)
 
-        if camera_coords[2] < 0.05:
-            camera_coords[2] = 0.05
+        if camera_coords[2] < 0.2:
+            camera_coords[2] = 0.2
 
         coord_radius=np.sqrt(camera_coords[0]**2+camera_coords[1]**2+camera_coords[2]**2)
         # #if trying to move out of 90% of max reach
@@ -408,10 +408,6 @@ class SphereFitting(Node):
             self.info_logger("ENTERED IF STATEMENT")
             scaling=(.85*.9)/coord_radius
             camera_coords=camera_coords*scaling
-
-                
-
-        camera_coords = np.array([0.5, 0.5, 0.5])
 
         self.warn_logger(f"camera_coords: {camera_coords}")
         self.warn_logger(f"Sphere center: {sphere.center}")
@@ -422,15 +418,14 @@ class SphereFitting(Node):
 
         self.info_logger(f"vec: {vec_camera_to_apple}")
 
-        coor_frame = np.identity(3)
-        z_axis = coor_frame[2]
+        coord_frame = np.identity(3)
+        z_axis = coord_frame[2]
         
         # Get rotational vector, convert to quaternion
         rot_axis = np.cross(z_axis, vec_camera_to_apple)
         rot_angle = np.arccos(np.dot(z_axis, vec_camera_to_apple)) # both vectors are unit vectors
         self.info_logger(f"Cross: {rot_axis}")
         rotation = Rotation.from_rotvec(rotvec=rot_angle * rot_axis)
-        self.info_logger(f"\nRot mat:\n{rotation.as_euler('xyz', degrees=True)}")
         quat = rotation.as_quat()
 
         self.warn_logger(f'quat: {quat}')

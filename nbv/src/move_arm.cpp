@@ -82,8 +82,8 @@ MoveArmNode::MoveArmNode() : Node("move_arm_node", rclcpp::NodeOptions().automat
         // Define the size of the box in meters
         primitive.type = primitive.BOX;
         primitive.dimensions.resize(3);
-        primitive.dimensions[primitive.BOX_X] = 1;
-        primitive.dimensions[primitive.BOX_Y] = 1;
+        primitive.dimensions[primitive.BOX_X] = 2.0;
+        primitive.dimensions[primitive.BOX_Y] = 2.0;
         primitive.dimensions[primitive.BOX_Z] = 0.015;
 
         // Define the pose of the box (relative to the frame_id)
