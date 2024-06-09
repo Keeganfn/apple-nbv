@@ -1,0 +1,6 @@
+string id
+bool remove_from_scene
+float64 radius
+geometry_msgs/Pose pose
+---
+bool success

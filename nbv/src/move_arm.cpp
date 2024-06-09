@@ -3,6 +3,7 @@
 // Include our custom message type definition.
 #include "nbv_interfaces/srv/move_arm.hpp"
 #include "nbv_interfaces/srv/move_to_named_target.hpp"
+#include "nbv_interfaces/srv/set_sphere_constraint.hpp"
 
 // Moveit
 #include <moveit/move_group_interface/move_group_interface.h>
@@ -21,17 +22,24 @@ public:
 	MoveArmNode();
     // Move group interface
     moveit::planning_interface::MoveGroupInterface move_group_;
+    moveit::planning_interface::PlanningSceneInterface planning_scene_interface_;
+
     void test_arm();
 
 private:
     rclcpp::Service<nbv_interfaces::srv::MoveArm>::SharedPtr arm_service_;
     rclcpp::Service<nbv_interfaces::srv::MoveToNamedTarget>::SharedPtr arm_named_service_;
+    rclcpp::Service<nbv_interfaces::srv::SetSphereConstraint>::SharedPtr set_sphere_constraint_service_;
     rclcpp::CallbackGroup::SharedPtr callback_group_subscriber1_; 
     rclcpp::CallbackGroup::SharedPtr callback_group_subscriber2_;
+    rclcpp::CallbackGroup::SharedPtr callback_group_subscriber3_;
     void move_to_pose(const std::shared_ptr<nbv_interfaces::srv::MoveArm::Request> request,
 		              const std::shared_ptr<nbv_interfaces::srv::MoveArm::Response> response);
     void move_to_named_target(const std::shared_ptr<nbv_interfaces::srv::MoveToNamedTarget::Request> request,
                               const std::shared_ptr<nbv_interfaces::srv::MoveToNamedTarget::Response> response);
+    void set_sphere_constraint(
+        const std::shared_ptr<nbv_interfaces::srv::SetSphereConstraint::Request> request,
+        const std::shared_ptr<nbv_interfaces::srv::SetSphereConstraint::Response> response);
 };
 
 
@@ -41,7 +49,7 @@ MoveArmNode::MoveArmNode() : Node("move_arm_node", rclcpp::NodeOptions().automat
     // callback groups
     callback_group_subscriber1_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     callback_group_subscriber2_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
-    
+    callback_group_subscriber3_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
 
     // Set up services, one for pose goals and one for named target goals
     arm_service_ = this->create_service<nbv_interfaces::srv::MoveArm>(
@@ -56,7 +64,15 @@ MoveArmNode::MoveArmNode() : Node("move_arm_node", rclcpp::NodeOptions().automat
         rmw_qos_profile_services_default,
         callback_group_subscriber2_
     );
-    moveit::planning_interface::PlanningSceneInterface planning_scene_interface_;
+    set_sphere_constraint_service_ = this->create_service<nbv_interfaces::srv::SetSphereConstraint>(
+        "set_sphere_constraint",
+        std::bind(&MoveArmNode::set_sphere_constraint, this, _1, _2),
+        rmw_qos_profile_services_default,
+        callback_group_subscriber3_
+    );
+
+    // moveit::planning_interface::PlanningSceneInterface planning_scene_interface_;
+
     auto const collision_object = [frame_id =move_group_.getPlanningFrame()] {
         moveit_msgs::msg::CollisionObject collision_object;
         collision_object.header.frame_id = frame_id;
@@ -66,8 +82,8 @@ MoveArmNode::MoveArmNode() : Node("move_arm_node", rclcpp::NodeOptions().automat
         // Define the size of the box in meters
         primitive.type = primitive.BOX;
         primitive.dimensions.resize(3);
-        primitive.dimensions[primitive.BOX_X] = 1;
-        primitive.dimensions[primitive.BOX_Y] = 1;
+        primitive.dimensions[primitive.BOX_X] = 2.0;
+        primitive.dimensions[primitive.BOX_Y] = 2.0;
         primitive.dimensions[primitive.BOX_Z] = 0.015;
 
         // Define the pose of the box (relative to the frame_id)
@@ -83,7 +99,7 @@ MoveArmNode::MoveArmNode() : Node("move_arm_node", rclcpp::NodeOptions().automat
 
         return collision_object;
     }();
-    planning_scene_interface_.applyCollisionObject(collision_object);
+    this->planning_scene_interface_.applyCollisionObject(collision_object);
     // vel and acc limits
     this->move_group_.setMaxAccelerationScalingFactor(1.0);
     this->move_group_.setMaxVelocityScalingFactor(1.0);
@@ -119,7 +135,7 @@ void MoveArmNode::move_to_pose(const std::shared_ptr<nbv_interfaces::srv::MoveAr
     // tf2::Quaternion orientation;
     // orientation.setRPY(3.14/2, 3.14, 3.14/2);
     geometry_msgs::msg::PoseStamped msg;
-    // msg.header.frame_id = "base_link";
+    msg.header.frame_id = "base_link";
     // msg.pose.orientation = tf2::toMsg(orientation);;
     msg.pose.position.x = request->goal.position.x;
     msg.pose.position.y = request->goal.position.y;
@@ -129,20 +145,62 @@ void MoveArmNode::move_to_pose(const std::shared_ptr<nbv_interfaces::srv::MoveAr
     msg.pose.orientation.z = request->goal.orientation.z;
     msg.pose.orientation.w = request->goal.orientation.w;
     this->move_group_.setPoseTarget(msg, "tool0");
-    this->move_group_.setGoalOrientationTolerance(.1);
+    this->move_group_.setGoalOrientationTolerance(0.1);
 
     // Attempts to move to pose goal
     moveit::planning_interface::MoveGroupInterface::Plan goal;
-    auto const ok = static_cast<bool>(move_group_.plan(goal));
+    auto const ok = static_cast<bool>(this->move_group_.plan(goal));
     response->result = true;
     if (ok){
         this->move_group_.execute(goal);
     }
     else{
-        RCLCPP_ERROR(this->get_logger(), "Planing failed!");
+        RCLCPP_ERROR(this->get_logger(), "Planning failed!");
         response->result = false;
     }
+}
 
+void MoveArmNode::set_sphere_constraint(
+        const std::shared_ptr<nbv_interfaces::srv::SetSphereConstraint::Request> request,
+        const std::shared_ptr<nbv_interfaces::srv::SetSphereConstraint::Response> response) 
+{
+    // RCLCPP_INFO(this-> get_logger(), "%s", request->id);
+    auto const collision_object = [request, frame_id=move_group_.getPlanningFrame()] {
+        moveit_msgs::msg::CollisionObject collision_object;
+        collision_object.header.frame_id = "base_link";
+        collision_object.id = "sphere" + request->id;//;
+        shape_msgs::msg::SolidPrimitive primitive;
+
+        // Define the size of the box in meters
+        primitive.type = primitive.SPHERE;
+        primitive.dimensions.resize(1);
+        primitive.dimensions[0] = request->radius; // sphere only has one dimension in this type
+
+        // Define the pose of the box (relative to the frame_id)
+        geometry_msgs::msg::Pose sphere_pose = request->pose;
+
+        collision_object.primitives.push_back(primitive);
+        collision_object.primitive_poses.push_back(sphere_pose);
+
+        if (request->remove_from_scene) {
+            collision_object.operation = collision_object.REMOVE;
+        }
+        else {
+            collision_object.operation = collision_object.ADD;
+        }
+        
+        return collision_object;
+    }();
+    bool ok = this->planning_scene_interface_.applyCollisionObject(collision_object);
+
+    if (ok) {
+        response->success = true;
+        RCLCPP_INFO(this-> get_logger(), "Successfully applied collision object!");
+    }
+    else {
+        RCLCPP_ERROR(this->get_logger(), "Failed to add collision object to the scene.");
+        response->success = false;
+    }
 }
 
 void MoveArmNode::test_arm()
@@ -153,10 +211,10 @@ void MoveArmNode::test_arm()
     msg.header.frame_id = "base_link";
     msg.pose.orientation = tf2::toMsg(orientation);;
     msg.pose.position.x = 0.35;
-    msg.pose.position.y = 0;
+    msg.pose.position.y = 0.0;
     msg.pose.position.z = 0.6;
     this->move_group_.setPoseTarget(msg, "tool0");
-    this->move_group_.setGoalOrientationTolerance(.1);
+    this->move_group_.setGoalOrientationTolerance(0.1);
 
     moveit::planning_interface::MoveGroupInterface::Plan goal;
     auto const ok = static_cast<bool>(move_group_.plan(goal));
